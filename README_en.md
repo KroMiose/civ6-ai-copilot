@@ -84,6 +84,10 @@ The agent will tell you which briefing information it needs. Return to Civ6, ope
 
 If your multiplayer room restricts UI or utility Mods, follow the room rules first. This project is for turn planning assistance, not cheating.
 
+## Community
+
+- Discord: [https://discord.gg/eMsgwFnxUB](https://discord.gg/eMsgwFnxUB)
+
 ## More Docs
 
 - [Developer and maintainer docs](docs/README.md)
