@@ -62,10 +62,11 @@ npm run rc:check -- --manual-evidence "<manual-evidence.json>" --format markdown
 准备元数据：
 
 - 标题：`Civ6 AI Copilot`
-- 简短描述：本地玩家可见情报汇总 + 回合分析工作流。
+- 简短描述：Civ6 回合规划 AI 副官：把当前局势整理成战情简报，帮助玩家获得城市、科技、市政、政策、军事和定居建议。
 - 标签：按 Civ6 Workshop 当前可用标签选择 UI / Utility / Multiplayer-compatible 等。
 - 预览图：使用项目自制图，不使用未经授权素材。
 - Changenote：对应 GitHub release notes。
+- 语言：按 `docs/steam-workshop-copy.md` 分别填写 English 和 Simplified Chinese。不要把中文说明写入 English 语言页。
 
 流程：
 
@@ -77,15 +78,28 @@ npm run rc:check -- --manual-evidence "<manual-evidence.json>" --format markdown
 6. 邀请测试者订阅，验证 Additional Content、对局加载、战情简报、bridge/tuner-bridge 和多人公平。
 7. 通过测试后改为 public。
 
+### 语言填写
+
+Steam Workshop 标题和描述是按语言保存的。Steamworks `SetItemUpdateLanguage` 未设置时会默认写入 `english`，所以通过 SteamCMD 的普通 `title` / `description` VDF 更新通常会落到 English 语言页。
+
+推荐在网页编辑器里手动维护两份语言：
+
+1. 语言选择 `英语` / `English`，粘贴 `docs/steam-workshop-copy.md` 的 English title 和 English description。
+2. 语言选择 `简体中文` / `Simplified Chinese`，粘贴同一文件的 Simplified Chinese title 和 description。
+3. 保存后分别切回两个语言确认内容没有串语言。
+
 ## 5. Workshop 描述建议
 
 描述应清楚表达：
 
-- 这是 Civ6 UI/utility Mod。
-- Mod 汇总本地玩家理论可见情报。
-- Mod 不修改规则、地图、单位、资源、外交、生产或存档。
+- 这是 Civ6 回合规划 AI 副官和 UI/utility Mod。
+- 它把当前回合局势整理成 AI 可分析的战情简报，减少玩家反复手动描述上下文。
+- 它能支持城市生产、科技市政、政策换卡、军事防守、海军探索、资源规划和定居选址等常见问题。
 - AI 建议需要搭配本地工具和 Agent Skill。
+- Workshop 首页必须直接放 Mod 安装步骤和可复制的 Agent Skill 安装提示词，不把它们藏进深层 GitHub 文档。
+- Mod 不修改规则、地图、单位、资源、外交、生产或存档。
 - 多人使用前应遵守房间规则和玩家约定。
+- “本地玩家可见”“多人公平边界”等内容放在安全说明中，不作为首屏核心卖点。
 
 避免把技术协议、checksum、chunk、exportId 或长排障命令放进 Workshop 首页；这些内容链接到 GitHub 文档即可。
 

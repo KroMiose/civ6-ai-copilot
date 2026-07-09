@@ -33,12 +33,12 @@
       <zh_Hans_CN>Civ6 AI Copilot（战情简报）</zh_Hans_CN>
     </Text>
     <Text id="LOC_CIV6_AI_COPILOT_MOD_TEASER">
-      <en_US>Summarize local-player visible intelligence for AI-assisted review.</en_US>
-      <zh_Hans_CN>汇总本地可见情报，交给 AI 副官研判。</zh_Hans_CN>
+      <en_US>Prepare AI-ready turn briefings for clearer Civilization VI planning.</en_US>
+      <zh_Hans_CN>把当前局势整理成战情简报，交给 AI 副官规划本回合。</zh_Hans_CN>
     </Text>
     <Text id="LOC_CIV6_AI_COPILOT_MOD_DESCRIPTION">
-      <en_US>Adds a passive in-game briefing panel for preparing local-player visible information for external AI analysis. It does not change rules, units, map, resources, diplomacy, or saved-game state.</en_US>
-      <zh_Hans_CN>添加被动游戏内战情简报，为外部 AI 分析汇总本地玩家理论可见信息；不改变规则、单位、地图、资源、外交或存档状态。</zh_Hans_CN>
+      <en_US>Adds a passive in-game briefing panel that organizes the current turn for external AI analysis, including cities, units, map context, tech/civics, policies, resources, and public diplomacy. It does not change rules, units, map, resources, diplomacy, production, or saved-game state.</en_US>
+      <zh_Hans_CN>添加被动游戏内战情简报，把当前回合的城市、单位、地图、科技市政、政策、资源和公开外交整理给外部 AI 分析；不改变规则、单位、地图、资源、外交、生产或存档状态。</zh_Hans_CN>
     </Text>
   </LocalizedText>
 

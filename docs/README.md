@@ -1,6 +1,6 @@
 # 文档索引
 
-本目录保存 `civ6-ai-copilot` 的玩家指南、设计说明、开发者运行簿和发布文档。普通玩家优先阅读仓库根目录的 `README.md` 和 `user-guide.md`。
+本目录保存 `civ6-ai-copilot` 的玩家指南、设计说明、开发者运行簿和发布文档。普通玩家优先阅读仓库根目录的 `README.md`；维护者再从本索引进入细节文档。
 
 ## 玩家文档
 
@@ -23,6 +23,8 @@
 
 ## 发布
 
+- `release-automation.md`：本地 artifacts、GitHub Actions、tag release 和 Steam 半自动发布分工。
+- `steam-workshop-copy.md`：Steam Workshop 英文和简体中文标题、描述、changenote 文案。
 - `steam-workshop-publishing.md`：GitHub release 与 Steam Workshop 发布步骤、元数据和检查清单。
 
 ## 维护原则

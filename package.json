@@ -43,6 +43,7 @@
     "preflight": "tsx tools/copilot/src/preflight-cli.ts",
     "privacy:check": "tsx tools/privacy/src/privacy-check-cli.ts",
     "rc:check": "tsx tools/release/src/rc-check-cli.ts",
+    "release:dist": "bash tools/release/archive-release.sh",
     "release:package": "tsx tools/release/src/release-bundle-cli.ts package",
     "release:validate": "tsx tools/release/src/release-bundle-cli.ts validate",
     "skill:install": "tsx tools/skill-package/src/skill-package-cli.ts install",

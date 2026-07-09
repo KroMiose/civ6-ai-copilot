@@ -1,0 +1,50 @@
+name: Release Candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build RC Artifacts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Validate Mod
+        run: npm run mod:validate
+
+      - name: Validate Skill
+        run: npm run skill:validate
+
+      - name: Privacy Check
+        run: npm run privacy:check
+
+      - name: Build RC Artifacts
+        run: npm run release:dist
+
+      - name: Upload RC Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: civ6-ai-copilot-rc
+          path: dist/*
+          if-no-files-found: error

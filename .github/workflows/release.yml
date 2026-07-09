@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify tag matches project version
+        id: version
+        env:
+          REQUESTED_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
+        run: |
+          VERSION="$(node -e "const fs = require('node:fs'); process.stdout.write(JSON.parse(fs.readFileSync('project-version.json', 'utf8')).version)")"
+          EXPECTED_TAG="v$VERSION"
+          if [ "$REQUESTED_TAG" != "$EXPECTED_TAG" ]; then
+            echo "Release tag $REQUESTED_TAG does not match project version $VERSION." >&2
+            exit 1
+          fi
+          NOTES_FILE="docs/release-notes/$REQUESTED_TAG.md"
+          if [ ! -f "$NOTES_FILE" ]; then
+            echo "Missing release notes: $NOTES_FILE" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$REQUESTED_TAG" >> "$GITHUB_OUTPUT"
+          echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Validate Mod
+        run: npm run mod:validate
+
+      - name: Validate Skill
+        run: npm run skill:validate
+
+      - name: Privacy Check
+        run: npm run privacy:check
+
+      - name: Build Release Artifacts
+        run: npm run release:dist
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          NOTES_FILE: ${{ steps.version.outputs.notes_file }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            dist/*.zip \
+            dist/*.json \
+            dist/checksums.txt \
+            dist/rc-check.md \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Civ6 AI Copilot $RELEASE_TAG" \
+            --notes-file "$NOTES_FILE" \
+            --prerelease \
+            --verify-tag
