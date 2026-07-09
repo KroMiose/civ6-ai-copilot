@@ -1,5 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import {
   buildCiv6AICopilotPaths,
   formatCiv6AICopilotPathsPowerShell
@@ -60,6 +63,34 @@ test("paths helper accepts custom Civ6 data and Mods directories", () => {
   assert.equal(paths.installModDir, "E:\\Civ6Mods\\civ6-ai-copilot");
   assert.equal(paths.luaLogPath, "D:\\Civ6UserData\\Logs\\Lua.log");
   assert.match(paths.commands.installModFromBundle, /"E:\\Civ6Mods"/);
+});
+
+test("paths helper prefers the AppData Firaxis logs directory on Windows when present", () => {
+  const homeDir = mkdtempSync(path.join(os.tmpdir(), "civ6-ai-copilot-home-"));
+  try {
+    const logsDir = path.win32.join(
+      homeDir,
+      "AppData",
+      "Local",
+      "Firaxis Games",
+      "Sid Meier's Civilization VI",
+      "Logs"
+    );
+    mkdirSync(logsDir, { recursive: true });
+
+    const paths = buildCiv6AICopilotPaths({
+      platform: "win32",
+      homeDir
+    });
+
+    assert.equal(paths.logsDir, logsDir);
+    assert.equal(paths.luaLogPath, path.win32.join(logsDir, "Lua.log"));
+    assert.equal(paths.moddingLogPath, path.win32.join(logsDir, "Modding.log"));
+    assert.equal(paths.userInterfaceLogPath, path.win32.join(logsDir, "UserInterface.log"));
+    assert.equal(paths.databaseLogPath, path.win32.join(logsDir, "Database.log"));
+  } finally {
+    rmSync(homeDir, { recursive: true, force: true });
+  }
 });
 
 test("paths helper accepts custom Logs and Lua.log paths", () => {

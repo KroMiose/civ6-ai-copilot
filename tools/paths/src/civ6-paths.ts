@@ -1,5 +1,6 @@
 import os from "node:os";
 import path from "node:path";
+import { existsSync } from "node:fs";
 
 export type Civ6PathPlatform = "win32" | "darwin" | "linux";
 
@@ -57,7 +58,7 @@ export function buildCiv6AICopilotPaths(options: Civ6AICopilotPathOptions = {}):
   const documentsDir = pathApi.join(homeDir, "Documents");
   const civ6UserDataDir = options.civ6UserDataDir ?? defaultCiv6UserDataDir(platform, homeDir);
   const modsDir = options.modsDir ?? defaultCiv6ModsDir(platform, civ6UserDataDir);
-  const logsDir = options.logsDir ?? defaultCiv6LogsDir(platform, civ6UserDataDir);
+  const logsDir = options.logsDir ?? defaultCiv6LogsDir(platform, civ6UserDataDir, homeDir);
   const luaLogPath = options.luaLogPath ?? pathApi.join(logsDir, "Lua.log");
   const moddingLogPath = pathApi.join(logsDir, "Modding.log");
   const userInterfaceLogPath = pathApi.join(logsDir, "UserInterface.log");
@@ -288,8 +289,19 @@ function defaultCiv6ModsDir(platform: Civ6PathPlatform, civ6UserDataDir: string)
   return path.posix.join(civ6UserDataDir, "Mods");
 }
 
-function defaultCiv6LogsDir(platform: Civ6PathPlatform, civ6UserDataDir: string): string {
+function defaultCiv6LogsDir(platform: Civ6PathPlatform, civ6UserDataDir: string, homeDir: string): string {
   if (platform === "win32") {
+    const localAppDataLogsDir = path.win32.join(
+      homeDir,
+      "AppData",
+      "Local",
+      "Firaxis Games",
+      "Sid Meier's Civilization VI",
+      "Logs"
+    );
+    if (existsSync(localAppDataLogsDir)) {
+      return localAppDataLogsDir;
+    }
     return path.win32.join(civ6UserDataDir, "Logs");
   }
   if (platform === "darwin") {
