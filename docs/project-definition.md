@@ -2,7 +2,7 @@
 
 `civ6-ai-copilot` 是面向 Civilization VI 的本地可见情报副官。它由一个被动 InGame UI Mod、一组本地桌面工具、一个稳定 snapshot schema 和一个 Agent Skill 组成。
 
-项目目标不是操作游戏，而是把玩家已经理论可见的局势汇总为可审查、可验证、可交接的结构化材料，让 AI 能给出更具体的中文建议。
+项目目标不是操作游戏，而是把玩家已经理论可见的局势汇总为可审查、可验证、可交接的结构化材料，让 AI 能按用户提问语言给出更具体的回合建议。
 
 ## 产品目标
 
@@ -34,7 +34,7 @@
 | D-009 | Skill 行为 | Skill 优先运行标准入口并读取其 handoff 产物；信息不足时给出具体战情简报动作。 |
 | D-010 | 玩家位置表达 | 坐标用于内部分析和 SVG；面向玩家默认使用相对位置和可见锚点。 |
 | D-011 | 发布渠道 | GitHub release、Steam Workshop、Agent Skill package、统一 release bundle。 |
-| D-012 | 产品语言 | 用户可见文字遵循 `docs/product-language.md`：克制、专业、游戏内战情语境；README 不复制完整安装教程。 |
+| D-012 | 产品语言 | 用户可见文字遵循 `docs/product-language.md`：克制、专业、游戏内战情语境；README 提供简体中文和英文入口；Skill 按用户提问语言回答并使用对应 Civ6 本地化术语。 |
 | D-013 | 地图规划字段 | `visibleMap.tiles` 导出已揭示/当前可见地块的规划事实：地形、地貌、可见资源、河流边、淡水、丘陵/山脉/水域/悬崖、改良、路线、区域、吸引力和基础产出；字段缺失表示当前 API 未提供或当前玩家不可识别，不代表事实不存在。 |
 
 影响这些决策的变更需要先更新本表或新增 ADR，再进入实现。
@@ -65,7 +65,7 @@ flowchart LR
 - `schemas/`：定义 snapshot contract。
 - `tools/copilot/`：标准入口、preflight、summary、handoff 和 AI 交接材料。
 - `tools/render-map/`：把玩家可见地图渲染为 hex SVG。
-- `skill/`：Agent Skill，负责情报更新引导和中文建议。
+- `skill/`：Agent Skill，负责情报更新引导，并按用户提问语言提供建议。
 - `tests/`：自动化测试、fixture 和手工测试模板。
 - `docs/`：公开设计、安装、协议、测试和发布文档。
 - `research/`：调研记录，不作为发布运行时依赖。

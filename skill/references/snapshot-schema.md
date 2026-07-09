@@ -46,7 +46,7 @@
 
 给开局、铺城、区域和单位移动建议时，先核对单位所在和目标相邻地块：地形/地貌决定移动代价和视野收益，河流边与悬崖边影响通行和区域规划，淡水/海岸决定城市基础住房与港口节奏。能从 `movesRemaining` 与地块事实判断的行动，直接给明确回合安排，不要写“若还能行动/若还能建城”这类不确定话。
 
-术语输出用文明 6 中文名，不把英文内部标识直接写给玩家。例：`TERRAIN_PLAINS_HILLS` 写“平原丘陵”，`FEATURE_JUNGLE` 写“雨林”，`coast/coastal` 写“海岸/沿海”，腓尼基 `Cothon` 写“U型港”或“特色港口”。
+术语输出使用当前回答语言对应的 Civilization VI 本地化名称，不把英文内部标识直接写给玩家。中文回答例：`TERRAIN_PLAINS_HILLS` 写“平原丘陵”，`FEATURE_JUNGLE` 写“雨林”，`coast/coastal` 写“海岸/沿海”，腓尼基 `Cothon` 写“U型港”或“特色港口”。英文回答使用 Civ6 英文术语，例如“plains hills”、“rainforest”、“coast/coastal”和“Cothon”。
 
 `cities[].currentProduction.type` 应是 `UNIT_*`、`BUILDING_*`、`DISTRICT_*`、`PROJECT_*` 或 `UNKNOWN_PRODUCTION`，`name` 应是本地化文本或未知占位。若看到纯数字，说明快照来自旧 Mod 或解析失败，先要求重新安装并重新汇总，不要把数字当成生产项目名称。`turnsUntilComplete` 只应是非负整数；如果生产刚完成且玩家尚未选择新生产，该字段可能不会出现，不能把 `-1` 当作“还差 -1 回合”。
 
@@ -72,7 +72,7 @@
 
 1. 先把玩家请求转成稳定分析意图，再运行标准入口，例如 `npm run copilot -- --intent turn-priority --clean`，读取生成的 handoff。
 2. 用 `modules` 判断当前分析意图是否覆盖。
-3. 用 `copilot-summary.md` 获得中文事实摘要；地图、战争、海军、定居问题结合 `visible-map.svg`。
+3. 用 `copilot-summary.md` 获得事实摘要；地图、战争、海军、定居问题结合 `visible-map.svg`。若摘要语言与当前回答语言不同，只把它作为事实来源，不把两种语言混写给玩家。
 4. 回答只把 `confirmed` 且在已覆盖模块内的事实写成“已确认”；`low`、`inferred`、未覆盖字段、未渲染地图都写进信息限制或风险。
 5. 关键模块未覆盖时，把信息限制翻译成战情简报动作，不要求用户笼统提供更多材料。
 6. 输出位置建议时，用相对位置、屏幕方向和游戏可见锚点；坐标只用于内部核对或用户明确要求。

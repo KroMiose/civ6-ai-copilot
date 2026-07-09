@@ -1,5 +1,7 @@
 # civ6-ai-copilot
 
+语言 / Language: [简体中文](README.md) | [English](README_en.md)
+
 `civ6-ai-copilot` 是面向 Civilization VI 的 AI 回合副官。它在游戏内提供「战情简报」面板，把当前局势整理成 AI 可以直接分析的材料，帮助你更快获得城市、科技、市政、政策、军事、海军和定居建议。
 
 它不会自动操作游戏，也不会修改规则、地图、单位、资源、外交、生产、存档或网络同步状态。
