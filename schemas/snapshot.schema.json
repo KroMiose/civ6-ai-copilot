@@ -1,0 +1,395 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://civ6-ai-copilot.local/schemas/snapshot.schema.json",
+  "title": "civ6-ai-copilot player-visible snapshot",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "exportedAt",
+    "source",
+    "session",
+    "localPlayer",
+    "modules",
+    "cities",
+    "units",
+    "visibleMap",
+    "techs",
+    "civics",
+    "government",
+    "resources",
+    "diplomacy",
+    "attention",
+    "confidence"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1.0"
+    },
+    "exportedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "object",
+      "required": ["modId", "modVersion", "compatVersion", "transport", "visibilityMode"],
+      "additionalProperties": false,
+      "properties": {
+        "modId": { "type": "string", "const": "civ6-ai-copilot" },
+        "modVersion": { "type": "string" },
+        "compatVersion": { "type": "string", "pattern": "^\\d+\\.\\d+$" },
+        "transport": { "type": "string", "enum": ["lua-log"] },
+        "visibilityMode": { "type": "string", "const": "player-visible" },
+        "exportId": { "type": "string" },
+        "exportType": {
+          "type": "string",
+          "enum": ["turn", "full", "modules", "map-window", "visible-map", "diagnostic"]
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "required": ["sessionId", "gameTurn", "ruleset", "gameSpeed", "mapSize", "isMultiplayer"],
+      "additionalProperties": false,
+      "properties": {
+        "sessionId": { "type": "string", "minLength": 1 },
+        "gameTurn": { "type": "integer", "minimum": 0 },
+        "ruleset": { "type": "string" },
+        "gameSpeed": { "type": "string" },
+        "mapSize": { "type": "string" },
+        "isMultiplayer": { "type": "boolean" }
+      }
+    },
+    "localPlayer": { "$ref": "#/$defs/playerSummary" },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "meta",
+          "localPlayer",
+          "cities",
+          "units",
+          "techs",
+          "civics",
+          "government",
+          "policies",
+          "resources",
+          "diplomacyPublic",
+          "visibleMap",
+          "notifications"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "cities": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/city" }
+    },
+    "units": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/unit" }
+    },
+    "visibleMap": {
+      "type": "object",
+      "required": ["source", "visibility", "confidence", "tiles"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "$ref": "#/$defs/visibilityKind" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "scope": { "type": "string", "enum": ["player-visible-revealed"] },
+        "truncated": { "type": "boolean" },
+        "tileLimit": { "type": "integer", "minimum": 1 },
+        "revealedTileCount": { "type": "integer", "minimum": 0 },
+        "bounds": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "minX": { "type": "integer" },
+            "maxX": { "type": "integer" },
+            "minY": { "type": "integer" },
+            "maxY": { "type": "integer" }
+          }
+        },
+        "tiles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/tile" }
+        }
+      }
+    },
+    "techs": { "$ref": "#/$defs/progression" },
+    "civics": { "$ref": "#/$defs/progression" },
+    "government": {
+      "type": "object",
+      "required": ["source", "visibility", "confidence", "currentGovernment", "policySlots", "policies"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "$ref": "#/$defs/visibilityKind" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "currentGovernment": { "$ref": "#/$defs/namedType" },
+        "policySlots": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "policies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/namedType" }
+        },
+        "canChangePolicies": { "type": "boolean" }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "required": ["source", "visibility", "confidence", "items"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "$ref": "#/$defs/visibilityKind" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type", "amount"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "type": "string" },
+              "name": { "type": "string" },
+              "amount": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    "diplomacy": {
+      "type": "object",
+      "required": ["source", "visibility", "confidence", "metPlayers"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "$ref": "#/$defs/visibilityKind" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "metPlayers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["playerId", "civilizationType", "relationship"],
+            "additionalProperties": false,
+            "properties": {
+              "playerId": { "type": "integer" },
+              "civilizationType": { "type": "string" },
+              "leaderType": { "type": "string" },
+              "relationship": { "type": "string" },
+              "militaryScore": { "type": "number" },
+              "visibility": { "$ref": "#/$defs/visibilityKind" },
+              "source": { "$ref": "#/$defs/sourceKind" },
+              "confidence": { "$ref": "#/$defs/confidenceKind" }
+            }
+          }
+        }
+      }
+    },
+    "attention": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "message", "severity", "source", "visibility", "confidence"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "type": "string" },
+          "message": { "type": "string" },
+          "severity": { "type": "string", "enum": ["info", "warning", "urgent"] },
+          "source": { "$ref": "#/$defs/sourceKind" },
+          "visibility": { "$ref": "#/$defs/visibilityKind" },
+          "confidence": { "$ref": "#/$defs/confidenceKind" }
+        }
+      }
+    },
+    "confidence": {
+      "type": "object",
+      "required": ["overall"],
+      "additionalProperties": { "$ref": "#/$defs/confidenceKind" },
+      "properties": {
+        "overall": { "$ref": "#/$defs/confidenceKind" }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "sourceKind": {
+      "type": "string",
+      "enum": ["lua-api", "ui-derived", "gameinfo-static", "inferred", "fixture"]
+    },
+    "visibilityKind": {
+      "type": "string",
+      "enum": ["own", "visible-now", "revealed", "public-known", "player-visible"]
+    },
+    "confidenceKind": {
+      "type": "string",
+      "enum": ["confirmed", "inferred", "low"]
+    },
+    "namedType": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "playerSummary": {
+      "type": "object",
+      "required": [
+        "source",
+        "visibility",
+        "confidence",
+        "localPlayerId",
+        "localPlayerNameHash",
+        "civilizationType",
+        "leaderType"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "$ref": "#/$defs/visibilityKind" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "localPlayerId": { "type": "integer", "minimum": 0 },
+        "localPlayerNameHash": { "type": "string" },
+        "civilizationType": { "type": "string" },
+        "leaderType": { "type": "string" },
+        "isHuman": { "type": "boolean" }
+      }
+    },
+    "city": {
+      "type": "object",
+      "required": ["source", "visibility", "confidence", "id", "name", "ownerPlayerId", "x", "y", "population"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "$ref": "#/$defs/visibilityKind" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "ownerPlayerId": { "type": "integer" },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "population": { "type": "integer", "minimum": 1 },
+        "currentProduction": { "$ref": "#/$defs/namedType" },
+        "turnsUntilComplete": { "type": "integer", "minimum": 0 },
+        "yields": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        }
+      }
+    },
+    "unit": {
+      "type": "object",
+      "required": ["source", "visibility", "confidence", "id", "type", "ownerPlayerId", "x", "y"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "$ref": "#/$defs/visibilityKind" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "name": { "type": "string" },
+        "ownerPlayerId": { "type": "integer" },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "damage": { "type": "integer", "minimum": 0 },
+        "movesRemaining": { "type": "number", "minimum": 0 },
+        "formationClass": { "type": "string" }
+      }
+    },
+    "tile": {
+      "type": "object",
+      "required": ["source", "visibility", "confidence", "x", "y", "revealed", "visibleNow"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "$ref": "#/$defs/visibilityKind" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "x": { "type": "integer" },
+        "y": { "type": "integer" },
+        "revealed": { "type": "boolean" },
+        "visibleNow": { "type": "boolean" },
+        "terrainType": { "type": "string" },
+        "featureType": { "type": "string" },
+        "resourceType": { "type": "string" },
+        "resourceAmount": { "type": "integer", "minimum": 0 },
+        "improvementType": { "type": "string" },
+        "routeType": { "type": "string" },
+        "districtType": { "type": "string" },
+        "continentType": { "type": "string" },
+        "isWater": { "type": "boolean" },
+        "isLake": { "type": "boolean" },
+        "isCoastalLand": { "type": "boolean" },
+        "isFreshWater": { "type": "boolean" },
+        "isRiver": { "type": "boolean" },
+        "isHills": { "type": "boolean" },
+        "isMountain": { "type": "boolean" },
+        "isImpassable": { "type": "boolean" },
+        "isNaturalWonder": { "type": "boolean" },
+        "riverEdges": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["W", "NW", "NE"] },
+          "uniqueItems": true
+        },
+        "cliffEdges": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["W", "NW", "NE"] },
+          "uniqueItems": true
+        },
+        "appeal": { "type": "number" },
+        "yields": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        },
+        "ownerPlayerId": { "type": "integer" },
+        "cityId": { "type": "string" },
+        "unitIds": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "progression": {
+      "type": "object",
+      "required": ["source", "visibility", "confidence", "current", "completed", "available"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "$ref": "#/$defs/visibilityKind" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "current": { "$ref": "#/$defs/namedType" },
+        "completed": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/namedType" }
+        },
+        "available": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/namedType" }
+        },
+        "boosts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type", "boosted"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "type": "string" },
+              "boosted": { "type": "boolean" },
+              "confidence": { "$ref": "#/$defs/confidenceKind" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

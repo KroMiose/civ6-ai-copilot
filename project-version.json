@@ -1,0 +1,16 @@
+{
+  "projectName": "civ6-ai-copilot",
+  "displayName": "Civ6 AI Copilot",
+  "chineseDisplayName": "文明 AI 副官",
+  "version": "0.1.0",
+  "compatVersion": "0.1",
+  "schemaVersion": "0.1.0",
+  "protocolVersion": "0.1.0",
+  "workshopVersion": 3,
+  "modId": "civ6-ai-copilot",
+  "modGuid": "8d2f71ce-6b34-4dbf-92da-cf7c2e21d2b7",
+  "modFolderName": "civ6-ai-copilot",
+  "skillName": "civ6-ai-copilot",
+  "luaStateName": "civ6_ai_copilot",
+  "logMarkerPrefix": "CIV6_AI_COPILOT"
+}

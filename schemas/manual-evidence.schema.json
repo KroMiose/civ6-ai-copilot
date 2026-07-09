@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://civ6-ai-copilot.local/schemas/manual-evidence.schema.json",
+  "title": "civ6-ai-copilot manual release evidence",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "evidenceKind",
+    "recordedAt",
+    "modVersion",
+    "windowsSmoke",
+    "multiplayerFairness",
+    "macCodexCopilot"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1.0"
+    },
+    "evidenceKind": {
+      "type": "string",
+      "enum": ["template", "real-manual-test"]
+    },
+    "recordedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "modVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 1200
+    },
+    "windowsSmoke": {
+      "type": "object",
+      "required": [
+        "status",
+        "civ6Build",
+        "ruleset",
+        "modEnabledInAdditionalContent",
+        "releaseManifestValidated",
+        "copilotButtonVisible",
+        "localizedTextOk",
+        "syncCurrentTurnExported",
+        "selectiveSyncExported",
+        "luaLogLoaded",
+        "controlsAvailable",
+        "gameApiAvailable",
+        "playersApiAvailable",
+        "mapApiAvailable",
+        "base64SelfTest",
+        "sha256SelfTest",
+        "hasUnitsInPlot",
+        "hasPlayerResources",
+        "hasPlayerProgression",
+        "hasGovernmentPolicies",
+        "bridgeLatestJson",
+        "preflightPassed",
+        "validatePassed",
+        "summarizePassed",
+        "renderMapPassed",
+        "doctorPassed",
+        "visibleDataBoundaryOk",
+        "noGameplayMutationObserved"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/manualStatus"
+        },
+        "civ6Build": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ruleset": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modEnabledInAdditionalContent": {
+          "type": "boolean"
+        },
+        "releaseManifestValidated": {
+          "type": "boolean"
+        },
+        "copilotButtonVisible": {
+          "type": "boolean"
+        },
+        "localizedTextOk": {
+          "type": "boolean"
+        },
+        "syncCurrentTurnExported": {
+          "type": "boolean"
+        },
+        "selectiveSyncExported": {
+          "type": "boolean"
+        },
+        "luaLogLoaded": {
+          "type": "boolean"
+        },
+        "controlsAvailable": {
+          "type": "boolean"
+        },
+        "gameApiAvailable": {
+          "type": "boolean"
+        },
+        "playersApiAvailable": {
+          "type": "boolean"
+        },
+        "mapApiAvailable": {
+          "type": "boolean"
+        },
+        "base64SelfTest": {
+          "type": "boolean"
+        },
+        "sha256SelfTest": {
+          "type": "boolean"
+        },
+        "hasUnitsInPlot": {
+          "type": "boolean"
+        },
+        "hasPlayerResources": {
+          "type": "boolean"
+        },
+        "hasPlayerProgression": {
+          "type": "boolean"
+        },
+        "hasGovernmentPolicies": {
+          "type": "boolean"
+        },
+        "bridgeLatestJson": {
+          "type": "boolean"
+        },
+        "preflightPassed": {
+          "type": "boolean"
+        },
+        "validatePassed": {
+          "type": "boolean"
+        },
+        "summarizePassed": {
+          "type": "boolean"
+        },
+        "renderMapPassed": {
+          "type": "boolean"
+        },
+        "doctorPassed": {
+          "type": "boolean"
+        },
+        "visibleDataBoundaryOk": {
+          "type": "boolean"
+        },
+        "noGameplayMutationObserved": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1200
+        }
+      }
+    },
+    "multiplayerFairness": {
+      "type": "object",
+      "required": [
+        "status",
+        "humanPlayers",
+        "ruleset",
+        "bothEnabledMod",
+        "separateSnapshotDirs",
+        "noDesyncObserved",
+        "copilotUsesLocalVisibilityNotice",
+        "playerA",
+        "playerB"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/manualStatus"
+        },
+        "humanPlayers": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "ruleset": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bothEnabledMod": {
+          "type": "boolean"
+        },
+        "separateSnapshotDirs": {
+          "type": "boolean"
+        },
+        "noDesyncObserved": {
+          "type": "boolean"
+        },
+        "copilotUsesLocalVisibilityNotice": {
+          "type": "boolean"
+        },
+        "playerA": {
+          "$ref": "#/$defs/playerFairnessEvidence"
+        },
+        "playerB": {
+          "$ref": "#/$defs/playerFairnessEvidence"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1200
+        }
+      }
+    },
+    "macCodexCopilot": {
+      "type": "object",
+      "required": [
+        "status",
+        "skillInstalledValidated",
+        "handoffGenerated",
+        "codexPromptReadFirst",
+        "copilotHandoffRead",
+        "snapshotValidatedOnCopilotMachine",
+        "localVisibilityNoticeShown",
+        "syncBlockerHonored",
+        "noBlindAnalysisWhenSyncRequired",
+        "handoffScopeHonored"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/manualStatus"
+        },
+        "skillInstalledValidated": {
+          "type": "boolean"
+        },
+        "handoffGenerated": {
+          "type": "boolean"
+        },
+        "codexPromptReadFirst": {
+          "type": "boolean"
+        },
+        "copilotHandoffRead": {
+          "type": "boolean"
+        },
+        "snapshotValidatedOnCopilotMachine": {
+          "type": "boolean"
+        },
+        "localVisibilityNoticeShown": {
+          "type": "boolean"
+        },
+        "syncBlockerHonored": {
+          "type": "boolean"
+        },
+        "noBlindAnalysisWhenSyncRequired": {
+          "type": "boolean"
+        },
+        "handoffScopeHonored": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1200
+        }
+      }
+    }
+  },
+  "$defs": {
+    "manualStatus": {
+      "type": "string",
+      "enum": ["pass", "fail", "not-run"]
+    },
+    "playerFairnessEvidence": {
+      "type": "object",
+      "required": [
+        "localPlayerVerified",
+        "ownCitiesOnly",
+        "ownUnitsOnlyExceptVisibleForeign",
+        "visibleForeignUnitsAreVisibleNow",
+        "noHiddenMap",
+        "noInvisibleForeignUnits",
+        "noUnmetPlayers",
+        "noOtherPlayerTechCivicsPolicies",
+        "preflightPassed",
+        "validatePassed",
+        "summarizePassed",
+        "renderMapVisibleOnly"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "localPlayerVerified": {
+          "type": "boolean"
+        },
+        "ownCitiesOnly": {
+          "type": "boolean"
+        },
+        "ownUnitsOnlyExceptVisibleForeign": {
+          "type": "boolean"
+        },
+        "visibleForeignUnitsAreVisibleNow": {
+          "type": "boolean"
+        },
+        "noHiddenMap": {
+          "type": "boolean"
+        },
+        "noInvisibleForeignUnits": {
+          "type": "boolean"
+        },
+        "noUnmetPlayers": {
+          "type": "boolean"
+        },
+        "noOtherPlayerTechCivicsPolicies": {
+          "type": "boolean"
+        },
+        "preflightPassed": {
+          "type": "boolean"
+        },
+        "validatePassed": {
+          "type": "boolean"
+        },
+        "summarizePassed": {
+          "type": "boolean"
+        },
+        "renderMapVisibleOnly": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

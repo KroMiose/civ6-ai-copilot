@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Mod id="8d2f71ce-6b34-4dbf-92da-cf7c2e21d2b7" version="3">
+  <Properties>
+    <Name>LOC_CIV6_AI_COPILOT_MOD_NAME</Name>
+    <Stability>Beta</Stability>
+    <Teaser>LOC_CIV6_AI_COPILOT_MOD_TEASER</Teaser>
+    <Description>LOC_CIV6_AI_COPILOT_MOD_DESCRIPTION</Description>
+    <Version>0.1.0</Version>
+    <Authors>civ6-ai-copilot contributors</Authors>
+    <EnabledByDefault>0</EnabledByDefault>
+    <AffectsSavedGames>0</AffectsSavedGames>
+    <CompatibleVersions>2.0</CompatibleVersions>
+  </Properties>
+
+  <InGameActions>
+    <UpdateText id="CIV6_AI_COPILOT_TEXT">
+      <File>text/civ6-ai-copilot-text.xml</File>
+    </UpdateText>
+    <AddUserInterfaces id="CIV6_AI_COPILOT_UI">
+      <Properties>
+        <Context>InGame</Context>
+      </Properties>
+      <File>ui/civ6_ai_copilot.xml</File>
+    </AddUserInterfaces>
+    <ImportFiles id="CIV6_AI_COPILOT_FILES">
+      <File>ui/civ6_ai_copilot.lua</File>
+    </ImportFiles>
+  </InGameActions>
+
+  <LocalizedText>
+    <Text id="LOC_CIV6_AI_COPILOT_MOD_NAME">
+      <en_US>Civ6 AI Copilot</en_US>
+      <zh_Hans_CN>Civ6 AI Copilot（战情简报）</zh_Hans_CN>
+    </Text>
+    <Text id="LOC_CIV6_AI_COPILOT_MOD_TEASER">
+      <en_US>Summarize local-player visible intelligence for AI-assisted review.</en_US>
+      <zh_Hans_CN>汇总本地可见情报，交给 AI 副官研判。</zh_Hans_CN>
+    </Text>
+    <Text id="LOC_CIV6_AI_COPILOT_MOD_DESCRIPTION">
+      <en_US>Adds a passive in-game briefing panel for preparing local-player visible information for external AI analysis. It does not change rules, units, map, resources, diplomacy, or saved-game state.</en_US>
+      <zh_Hans_CN>添加被动游戏内战情简报，为外部 AI 分析汇总本地玩家理论可见信息；不改变规则、单位、地图、资源、外交或存档状态。</zh_Hans_CN>
+    </Text>
+  </LocalizedText>
+
+  <Files>
+    <File>ui/civ6_ai_copilot.lua</File>
+    <File>ui/civ6_ai_copilot.xml</File>
+    <File>text/civ6-ai-copilot-text.xml</File>
+  </Files>
+</Mod>

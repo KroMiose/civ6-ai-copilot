@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+
+# Build and coverage
+dist/
+build/
+coverage/
+/release/
+.turbo/
+.cache/
+tmp/
+temp/
+*.tmp
+
+# Local config
+.env
+.env.*
+*.local
+
+# Civ6/user data
+*.Civ6Save
+*.Civ6Save.bak
+Lua.log
+Database.log
+Modding.log
+logs/
+saves/
+snapshots/
+exports/
+evidence/
+handoff/
+*.db
+*.sqlite
+*.sqlite-*
+
+# Generated maps/reports that may contain private game state
+*.snapshot.json
+*-snapshot.json
+copilot-report*.md
+map-render*.svg
+map-render*.png
+
+# Sanitized examples and regression fixtures are allowed.
+!tests/fixtures/**/*.snapshot.json
+!schemas/examples/**/*.snapshot.json
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/

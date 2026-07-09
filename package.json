@@ -1,0 +1,73 @@
+{
+  "name": "civ6-ai-copilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Civilization VI player-visible information bridge, desktop tools, and AI copilot skill.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "civ6-ai-copilot": "./tools/copilot/src/prepare-cli.ts",
+    "civ6-ai-copilot-bridge": "./tools/bridge/src/cli.ts",
+    "civ6-ai-copilot-doctor": "./tools/doctor/src/doctor-cli.ts",
+    "civ6-ai-copilot-handoff": "./tools/copilot/src/handoff-cli.ts",
+    "civ6-ai-copilot-manual-evidence-draft": "./tools/release/src/manual-evidence-draft-cli.ts",
+    "civ6-ai-copilot-manual-evidence-finalize": "./tools/release/src/manual-evidence-finalize-cli.ts",
+    "civ6-ai-copilot-manual-evidence": "./tools/release/src/manual-evidence-cli.ts",
+    "civ6-ai-copilot-paths": "./tools/paths/src/civ6-paths-cli.ts",
+    "civ6-ai-copilot-preflight": "./tools/copilot/src/preflight-cli.ts",
+    "civ6-ai-copilot-privacy": "./tools/privacy/src/privacy-check-cli.ts",
+    "civ6-ai-copilot-rc-check": "./tools/release/src/rc-check-cli.ts",
+    "civ6-ai-copilot-release": "./tools/release/src/release-bundle-cli.ts",
+    "civ6-ai-copilot-render-map": "./tools/render-map/src/render-map-cli.ts",
+    "civ6-ai-copilot-offline-smoke": "./tools/smoke/src/offline-smoke-cli.ts",
+    "civ6-ai-copilot-skill": "./tools/skill-package/src/skill-package-cli.ts",
+    "civ6-ai-copilot-summarize": "./tools/copilot/src/summarize-snapshot-cli.ts",
+    "civ6-ai-copilot-tuner-bridge": "./tools/tuner-bridge/src/cli.ts",
+    "civ6-ai-copilot-validate": "./tools/snapshot/src/validate-cli.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "bridge": "tsx tools/bridge/src/cli.ts",
+    "copilot": "tsx tools/copilot/src/prepare-cli.ts",
+    "doctor": "tsx tools/doctor/src/doctor-cli.ts",
+    "evidence:draft": "tsx tools/release/src/manual-evidence-draft-cli.ts",
+    "evidence:finalize": "tsx tools/release/src/manual-evidence-finalize-cli.ts",
+    "evidence:validate": "tsx tools/release/src/manual-evidence-cli.ts",
+    "handoff": "tsx tools/copilot/src/handoff-cli.ts",
+    "make-fixture-log": "tsx tools/bridge/src/create-fixture-log.ts",
+    "mod": "tsx tools/package/src/mod-package-cli.ts",
+    "mod:validate": "tsx tools/package/src/mod-package-cli.ts validate",
+    "paths": "tsx tools/paths/src/civ6-paths-cli.ts",
+    "preflight": "tsx tools/copilot/src/preflight-cli.ts",
+    "privacy:check": "tsx tools/privacy/src/privacy-check-cli.ts",
+    "rc:check": "tsx tools/release/src/rc-check-cli.ts",
+    "release:package": "tsx tools/release/src/release-bundle-cli.ts package",
+    "release:validate": "tsx tools/release/src/release-bundle-cli.ts validate",
+    "skill:install": "tsx tools/skill-package/src/skill-package-cli.ts install",
+    "render-map": "tsx tools/render-map/src/render-map-cli.ts",
+    "skill:package": "tsx tools/skill-package/src/skill-package-cli.ts package",
+    "skill:validate": "tsx tools/skill-package/src/skill-package-cli.ts validate",
+    "skill:validate-installed": "tsx tools/skill-package/src/skill-package-cli.ts validate-installed",
+    "smoke:offline": "tsx tools/smoke/src/offline-smoke-cli.ts",
+    "summarize": "tsx tools/copilot/src/summarize-snapshot-cli.ts",
+    "tuner-bridge": "tsx tools/tuner-bridge/src/cli.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "validate": "tsx tools/snapshot/src/validate-cli.ts",
+    "suggest-sync": "node skill/scripts/suggest-sync.mjs",
+    "validate:fixture": "tsx tools/snapshot/src/validate-cli.ts tests/fixtures/minimal-player-visible.snapshot.json",
+    "verify": "npm run build && npm run typecheck && npm test && npm run privacy:check && npm audit --audit-level=moderate"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.9",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.4"
+  }
+}

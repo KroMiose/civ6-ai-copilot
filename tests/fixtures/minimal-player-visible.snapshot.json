@@ -1,0 +1,269 @@
+{
+  "schemaVersion": "0.1.0",
+  "exportedAt": "2026-07-06T08:00:00.000Z",
+  "source": {
+    "modId": "civ6-ai-copilot",
+    "modVersion": "0.1.0",
+    "compatVersion": "0.1",
+    "transport": "lua-log",
+    "visibilityMode": "player-visible",
+    "exportId": "fixture-export-0001",
+    "exportType": "turn"
+  },
+  "session": {
+    "sessionId": "fixture-session",
+    "gameTurn": 42,
+    "ruleset": "RULESET_EXPANSION_2",
+    "gameSpeed": "GAMESPEED_ONLINE",
+    "mapSize": "MAPSIZE_SMALL",
+    "isMultiplayer": true
+  },
+  "localPlayer": {
+    "source": "fixture",
+    "visibility": "own",
+    "confidence": "confirmed",
+    "localPlayerId": 0,
+    "localPlayerNameHash": "sha256:fixture-local-player",
+    "civilizationType": "CIVILIZATION_BABYLON_STK",
+    "leaderType": "LEADER_HAMMURABI",
+    "isHuman": true
+  },
+  "modules": [
+    "meta",
+    "localPlayer",
+    "cities",
+    "units",
+    "techs",
+    "civics",
+    "government",
+    "policies",
+    "resources",
+    "diplomacyPublic",
+    "visibleMap"
+  ],
+  "cities": [
+    {
+      "source": "fixture",
+      "visibility": "own",
+      "confidence": "confirmed",
+      "id": "city-0-100",
+      "name": "Capital",
+      "ownerPlayerId": 0,
+      "x": 12,
+      "y": 18,
+      "population": 5,
+      "currentProduction": {
+        "type": "BUILDING_WALLS",
+        "name": "Ancient Walls"
+      },
+      "turnsUntilComplete": 3,
+      "yields": {
+        "food": 10,
+        "production": 8,
+        "science": 12,
+        "culture": 5,
+        "gold": 9
+      }
+    }
+  ],
+  "units": [
+    {
+      "source": "fixture",
+      "visibility": "own",
+      "confidence": "confirmed",
+      "id": "unit-0-200",
+      "type": "UNIT_ARCHER",
+      "name": "Archer",
+      "ownerPlayerId": 0,
+      "x": 13,
+      "y": 18,
+      "damage": 0,
+      "movesRemaining": 1,
+      "formationClass": "FORMATION_CLASS_LAND_COMBAT"
+    },
+    {
+      "source": "fixture",
+      "visibility": "visible-now",
+      "confidence": "confirmed",
+      "id": "unit-1-300",
+      "type": "UNIT_WARRIOR",
+      "name": "Visible enemy warrior",
+      "ownerPlayerId": 1,
+      "x": 15,
+      "y": 18,
+      "damage": 20,
+      "movesRemaining": 0,
+      "formationClass": "FORMATION_CLASS_LAND_COMBAT"
+    }
+  ],
+  "visibleMap": {
+    "source": "fixture",
+    "visibility": "player-visible",
+    "confidence": "confirmed",
+    "bounds": {
+      "minX": 12,
+      "maxX": 15,
+      "minY": 18,
+      "maxY": 19
+    },
+    "tiles": [
+      {
+        "source": "fixture",
+        "visibility": "visible-now",
+        "confidence": "confirmed",
+        "x": 12,
+        "y": 18,
+        "revealed": true,
+        "visibleNow": true,
+        "terrainType": "TERRAIN_GRASS",
+        "isFreshWater": true,
+        "isRiver": true,
+        "riverEdges": ["W"],
+        "appeal": 1,
+        "yields": {
+          "YIELD_FOOD": 2,
+          "YIELD_PRODUCTION": 1
+        },
+        "improvementType": "IMPROVEMENT_FARM",
+        "routeType": "ROUTE_ANCIENT_ROAD",
+        "ownerPlayerId": 0,
+        "cityId": "city-0-100"
+      },
+      {
+        "source": "fixture",
+        "visibility": "visible-now",
+        "confidence": "confirmed",
+        "x": 15,
+        "y": 18,
+        "revealed": true,
+        "visibleNow": true,
+        "terrainType": "TERRAIN_PLAINS",
+        "isFreshWater": false,
+        "isHills": false,
+        "isWater": false,
+        "isImpassable": false,
+        "appeal": 0,
+        "yields": {
+          "YIELD_FOOD": 1,
+          "YIELD_PRODUCTION": 1
+        },
+        "unitIds": ["unit-1-300"]
+      }
+    ]
+  },
+  "techs": {
+    "source": "fixture",
+    "visibility": "own",
+    "confidence": "confirmed",
+    "current": {
+      "type": "TECH_IRRIGATION",
+      "name": "Irrigation"
+    },
+    "completed": [
+      {
+        "type": "TECH_MINING",
+        "name": "Mining"
+      }
+    ],
+    "available": [
+      {
+        "type": "TECH_ARCHERY",
+        "name": "Archery"
+      }
+    ],
+    "boosts": [
+      {
+        "type": "TECH_IRRIGATION",
+        "boosted": false,
+        "confidence": "confirmed"
+      }
+    ]
+  },
+  "civics": {
+    "source": "fixture",
+    "visibility": "own",
+    "confidence": "confirmed",
+    "current": {
+      "type": "CIVIC_POLITICAL_PHILOSOPHY",
+      "name": "Political Philosophy"
+    },
+    "completed": [
+      {
+        "type": "CIVIC_CRAFTSMANSHIP",
+        "name": "Craftsmanship"
+      }
+    ],
+    "available": [
+      {
+        "type": "CIVIC_MILITARY_TRADITION",
+        "name": "Military Tradition"
+      }
+    ]
+  },
+  "government": {
+    "source": "fixture",
+    "visibility": "own",
+    "confidence": "confirmed",
+    "currentGovernment": {
+      "type": "GOVERNMENT_CHIEFDOM",
+      "name": "Chiefdom"
+    },
+    "policySlots": {
+      "military": 1,
+      "economic": 1
+    },
+    "policies": [
+      {
+        "type": "POLICY_DISCIPLINE",
+        "name": "Discipline"
+      },
+      {
+        "type": "POLICY_URBAN_PLANNING",
+        "name": "Urban Planning"
+      }
+    ],
+    "canChangePolicies": false
+  },
+  "resources": {
+    "source": "fixture",
+    "visibility": "own",
+    "confidence": "confirmed",
+    "items": [
+      {
+        "type": "RESOURCE_HORSES",
+        "name": "Horses",
+        "amount": 12
+      }
+    ]
+  },
+  "diplomacy": {
+    "source": "fixture",
+    "visibility": "public-known",
+    "confidence": "confirmed",
+    "metPlayers": [
+      {
+        "playerId": 1,
+        "civilizationType": "CIVILIZATION_ROME",
+        "leaderType": "LEADER_TRAJAN",
+        "relationship": "at-war",
+        "militaryScore": 120,
+        "visibility": "public-known",
+        "source": "fixture",
+        "confidence": "confirmed"
+      }
+    ]
+  },
+  "attention": [
+    {
+      "kind": "frontline-risk",
+      "message": "Visible enemy warrior is two tiles from Capital.",
+      "severity": "warning",
+      "source": "fixture",
+      "visibility": "visible-now",
+      "confidence": "confirmed"
+    }
+  ],
+  "confidence": {
+    "overall": "confirmed"
+  }
+}

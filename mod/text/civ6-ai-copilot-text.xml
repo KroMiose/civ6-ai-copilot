@@ -1,0 +1,486 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameData>
+  <LocalizedText>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_BUTTON_COPILOT" Language="en_US">
+      <Text>Open the briefing.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_BUTTON_COPILOT" Language="zh_Hans_CN">
+      <Text>打开战情简报。</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_BUTTON_COPILOT_SHORT" Language="en_US">
+      <Text>Briefing</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_BUTTON_COPILOT_SHORT" Language="zh_Hans_CN">
+      <Text>副官</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TITLE" Language="en_US">
+      <Text>Briefing</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TITLE" Language="zh_Hans_CN">
+      <Text>战情简报</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SUBTITLE" Language="en_US">
+      <Text>Summarize visible information for this turn.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SUBTITLE" Language="zh_Hans_CN">
+      <Text>汇总本回合可见情报。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_TURN" Language="en_US">
+      <Text>Turn Brief</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_TURN" Language="zh_Hans_CN">
+      <Text>汇总本回合</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_MAP" Language="en_US">
+      <Text>Map Intel</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_MAP" Language="zh_Hans_CN">
+      <Text>更新地图情报</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SELECTIVE_SYNC" Language="en_US">
+      <Text>Focused Intel</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SELECTIVE_SYNC" Language="zh_Hans_CN">
+      <Text>专题情报</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_AUTO_SYNC_OFF" Language="en_US">
+      <Text>Start-of-turn brief: Off</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_AUTO_SYNC_OFF" Language="zh_Hans_CN">
+      <Text>回合开始自动汇总：关闭</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_AUTO_SYNC_ON" Language="en_US">
+      <Text>Start-of-turn brief: On</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_AUTO_SYNC_ON" Language="zh_Hans_CN">
+      <Text>回合开始自动汇总：开启</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF" Language="en_US">
+      <Text>Manual brief</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF" Language="zh_Hans_CN">
+      <Text>手动汇总</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_LAST_EXPORT_NONE" Language="en_US">
+      <Text>Last brief: None</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_LAST_EXPORT_NONE" Language="zh_Hans_CN">
+      <Text>最近汇总：无</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_BRIDGE_HINT_AFTER_SYNC" Language="en_US">
+      <Text>Return to your Agent conversation after the brief is ready.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_BRIDGE_HINT_AFTER_SYNC" Language="zh_Hans_CN">
+      <Text>汇总后返回副官对话继续分析。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_CITIES" Language="en_US">
+      <Text>Cities</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_CITIES" Language="zh_Hans_CN">
+      <Text>城市运营</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_UNITS" Language="en_US">
+      <Text>Military</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_UNITS" Language="zh_Hans_CN">
+      <Text>军事态势</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_TECH_CIVICS" Language="en_US">
+      <Text>Tech and Civics</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_TECH_CIVICS" Language="zh_Hans_CN">
+      <Text>科技市政</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_GOVERNMENT" Language="en_US">
+      <Text>Government</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_GOVERNMENT" Language="zh_Hans_CN">
+      <Text>政体政策</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_RESOURCES" Language="en_US">
+      <Text>Resources</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_RESOURCES" Language="zh_Hans_CN">
+      <Text>资源库存</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_DIPLOMACY" Language="en_US">
+      <Text>Public Diplomacy</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_SYNC_DIPLOMACY" Language="zh_Hans_CN">
+      <Text>公开外交</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_FORCE_FULL" Language="en_US">
+      <Text>Full Briefing</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_FORCE_FULL" Language="zh_Hans_CN">
+      <Text>完整战情简报</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_CLOSE" Language="en_US">
+      <Text>Close</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_CLOSE" Language="zh_Hans_CN">
+      <Text>关闭</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW" Language="en_US">
+      <Text>Icon Candidates</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW" Language="zh_Hans_CN">
+      <Text>图标候选</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_TITLE" Language="en_US">
+      <Text>Icon Candidates</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_TITLE" Language="zh_Hans_CN">
+      <Text>图标候选</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_ATLAS" Language="en_US">
+      <Text>Atlas icons</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_ATLAS" Language="zh_Hans_CN">
+      <Text>图集图标</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_LAUNCHBAR" Language="en_US">
+      <Text>Launch bar style</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_LAUNCHBAR" Language="zh_Hans_CN">
+      <Text>顶栏样式</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_ADVISORS" Language="en_US">
+      <Text>Advisor icons</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_ADVISORS" Language="zh_Hans_CN">
+      <Text>顾问图标</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_NOTIFICATIONS" Language="en_US">
+      <Text>Notification icons</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_NOTIFICATIONS" Language="zh_Hans_CN">
+      <Text>通知图标</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_DIPLOMACY" Language="en_US">
+      <Text>Diplomacy icons</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_DIPLOMACY" Language="zh_Hans_CN">
+      <Text>外交图标</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_OVERVIEW" Language="en_US">
+      <Text>Overview icons</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_OVERVIEW" Language="zh_Hans_CN">
+      <Text>总览图标</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_POSITION" Language="en_US">
+      <Text>Position</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_POSITION" Language="zh_Hans_CN">
+      <Text>定位</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_QUEUE" Language="en_US">
+      <Text>Queue</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_QUEUE" Language="zh_Hans_CN">
+      <Text>队列</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_GREAT_PERSON" Language="en_US">
+      <Text>Person</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_GREAT_PERSON" Language="zh_Hans_CN">
+      <Text>人物</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_GENERIC_MODIFIER" Language="en_US">
+      <Text>Modifier</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_GENERIC_MODIFIER" Language="zh_Hans_CN">
+      <Text>指标</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_REPORTS" Language="en_US">
+      <Text>Reports</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_REPORTS" Language="zh_Hans_CN">
+      <Text>报告</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_GREAT_WORKS" Language="en_US">
+      <Text>Works</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_GREAT_WORKS" Language="zh_Hans_CN">
+      <Text>著作</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_LAUNCH_GREAT_PEOPLE" Language="en_US">
+      <Text>Great People</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_LAUNCH_GREAT_PEOPLE" Language="zh_Hans_CN">
+      <Text>伟人</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_TRADE" Language="en_US">
+      <Text>Trade</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_TRADE" Language="zh_Hans_CN">
+      <Text>商路</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_WORLD_RANKINGS" Language="en_US">
+      <Text>Rankings</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_WORLD_RANKINGS" Language="zh_Hans_CN">
+      <Text>排名</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_CITY_STATES" Language="en_US">
+      <Text>City-States</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_CITY_STATES" Language="zh_Hans_CN">
+      <Text>城邦</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_ESPIONAGE" Language="en_US">
+      <Text>Espionage</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_ESPIONAGE" Language="zh_Hans_CN">
+      <Text>谍报</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_GOVERNMENT" Language="en_US">
+      <Text>Government</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_GOVERNMENT" Language="zh_Hans_CN">
+      <Text>政体</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_BACK" Language="en_US">
+      <Text>Back to Briefing</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_ICON_PREVIEW_BACK" Language="zh_Hans_CN">
+      <Text>返回战情简报</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_FAIRNESS_NOTE" Language="en_US">
+      <Text></Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_FAIRNESS_NOTE" Language="zh_Hans_CN">
+      <Text></Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_STATUS_XML_LOADED" Language="en_US">
+      <Text>Waiting for this turn's brief.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_STATUS_XML_LOADED" Language="zh_Hans_CN">
+      <Text>等待本回合情报汇总。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_STATUS_READY" Language="en_US">
+      <Text>Waiting for this turn's brief.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_STATUS_READY" Language="zh_Hans_CN">
+      <Text>等待本回合情报汇总。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_TURN" Language="en_US">
+      <Text>Summarize core turn information for city, technology, civic, resource, and public diplomacy analysis.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_TURN" Language="zh_Hans_CN">
+      <Text>汇总本回合基础情报，适合城市、科技、市政、资源与公开外交等常规分析。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_MAP" Language="en_US">
+      <Text>Update revealed and currently visible map information for settlement, scouting, naval, frontline, and war planning.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_MAP" Language="zh_Hans_CN">
+      <Text>更新已揭示与当前可见地图情报，适合定居、侦察、海军、前线与战争判断。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_AUTO_SYNC" Language="en_US">
+      <Text>When enabled, prepares one turn brief at the start of the local player's turn. Off by default.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_AUTO_SYNC" Language="zh_Hans_CN">
+      <Text>开启后，仅在本地玩家回合开始时自动汇总一次本回合情报。默认关闭。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_CITIES" Language="en_US">
+      <Text>Summarize city population, housing, amenities, districts, yields, and current production for city-by-city planning.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_CITIES" Language="zh_Hans_CN">
+      <Text>汇总城市人口、住房、宜居度、区域、产出与当前生产，用于逐城规划。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_UNITS" Language="en_US">
+      <Text>Summarize your units and currently visible foreign units for scouting, defense, redeployment, and war assessment.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_UNITS" Language="zh_Hans_CN">
+      <Text>汇总己方单位与当前可见外方单位，用于侦察、防守、调兵与战事判断。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_RESOURCES" Language="en_US">
+      <Text>Summarize strategic resources, luxuries, and stockpiles for upgrades, upkeep, trades, and amenities.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_RESOURCES" Language="zh_Hans_CN">
+      <Text>汇总战略资源、奢侈品与库存状态，用于升级、维护、交易和宜居度判断。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_TECH_CIVICS" Language="en_US">
+      <Text>Summarize technology, civics, eurekas, and inspirations for route planning and timing decisions.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_TECH_CIVICS" Language="zh_Hans_CN">
+      <Text>汇总科技、市政、尤里卡与鼓舞进度，用于路线规划和关键时机判断。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_GOVERNMENT" Language="en_US">
+      <Text>Summarize government, policy slots, and active policies for card changes, timing windows, and strategic pacing.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_GOVERNMENT" Language="zh_Hans_CN">
+      <Text>汇总当前政体、政策槽与已插政策，用于换卡、产能爆发和战略节奏规划。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_DIPLOMACY" Language="en_US">
+      <Text>Summarize met civilizations, public relationships, and visible diplomatic information for trade, alliance, and war-risk assessment.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_DIPLOMACY" Language="zh_Hans_CN">
+      <Text>汇总已遇见文明、公开关系与可见外交信息，用于交易、结盟和战争风险判断。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_FORCE_FULL" Language="en_US">
+      <Text>Rebuild the full briefing context for first use, version changes, diagnostics, or several topics needing updates.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_FORCE_FULL" Language="zh_Hans_CN">
+      <Text>重建完整战情上下文，适合首次使用、版本变化、诊断异常或多个专题需要更新时使用。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_PREVIEW" Language="en_US">
+      <Text>Open a temporary in-game preview of candidate icons for the briefing entry.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_PREVIEW" Language="zh_Hans_CN">
+      <Text>打开临时图标预览，用游戏原生界面查看候选入口图标。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_POSITION" Language="en_US">
+      <Text>ICON_POSITION. Neutral marker; compact, but less distinctive.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_POSITION" Language="zh_Hans_CN">
+      <Text>ICON_POSITION。中性定位标记，体积克制，但辨识度偏弱。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_QUEUE" Language="en_US">
+      <Text>ICON_QUEUE. Related to planning, but close to production queue language.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_QUEUE" Language="zh_Hans_CN">
+      <Text>ICON_QUEUE。偏向规划语义，但容易联想到生产队列。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_GREAT_PERSON" Language="en_US">
+      <Text>ICON_GREAT_PERSON. Human-advisor feel; may overlap with Great People.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_GREAT_PERSON" Language="zh_Hans_CN">
+      <Text>ICON_GREAT_PERSON。有副官感，但可能与伟人入口混淆。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_GENERIC_MODIFIER" Language="en_US">
+      <Text>ICON_STATS_GENERIC_MODIFIER. Analytical and unobtrusive; less ceremonial.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_GENERIC_MODIFIER" Language="zh_Hans_CN">
+      <Text>ICON_STATS_GENERIC_MODIFIER。偏分析与状态提示，存在感较弱。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_REPORTS" Language="en_US">
+      <Text>LaunchBar_Hook_Reports. Closest to a briefing or report entry.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_REPORTS" Language="zh_Hans_CN">
+      <Text>LaunchBar_Hook_Reports。最接近战情简报与情报报告语义。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_GREAT_WORKS" Language="en_US">
+      <Text>LaunchBar_Hook_GreatWorks. Book-like silhouette; readable but cultural.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_GREAT_WORKS" Language="zh_Hans_CN">
+      <Text>LaunchBar_Hook_GreatWorks。书册轮廓清晰，但文化意味更强。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_LAUNCH_GREAT_PEOPLE" Language="en_US">
+      <Text>LaunchBar_Hook_GreatPeople. Advisor-like figure; possible overlap with Great People.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_LAUNCH_GREAT_PEOPLE" Language="zh_Hans_CN">
+      <Text>LaunchBar_Hook_GreatPeople。人物感强，但可能与伟人入口混淆。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_TRADE" Language="en_US">
+      <Text>LaunchBar_Hook_Trade. Strategic overview tone; less tied to an assistant.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_TRADE" Language="zh_Hans_CN">
+      <Text>LaunchBar_Hook_Trade。偏战略概览，但不直接表达副官。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_WORLD_RANKINGS" Language="en_US">
+      <Text>LaunchBar_Hook_WorldRankings. Good for overview and comparison; competitive tone.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_WORLD_RANKINGS" Language="zh_Hans_CN">
+      <Text>LaunchBar_Hook_WorldRankings。适合全局比较，但竞技意味更强。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_CITY_STATES" Language="en_US">
+      <Text>LaunchBar_Hook_CityStates. Diplomatic flavor; clear but narrow.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_CITY_STATES" Language="zh_Hans_CN">
+      <Text>LaunchBar_Hook_CityStates。外交气质明显，但主题范围偏窄。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_ESPIONAGE" Language="en_US">
+      <Text>LaunchBar_Hook_Espionage. Strong intelligence signal; may feel covert.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_ESPIONAGE" Language="zh_Hans_CN">
+      <Text>LaunchBar_Hook_Espionage。情报识别度高，但气质更偏隐秘行动。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_GOVERNMENT" Language="en_US">
+      <Text>LaunchBar_Hook_Government. Current comparison item; close to the civics/government entry.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_GOVERNMENT" Language="zh_Hans_CN">
+      <Text>LaunchBar_Hook_Government。当前对照项，容易与政体/市政入口接近。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_PREVIEW_BACK" Language="en_US">
+      <Text>Return to the briefing panel.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_ICON_PREVIEW_BACK" Language="zh_Hans_CN">
+      <Text>返回战情简报面板。</Text>
+    </Replace>
+
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_CLOSE" Language="en_US">
+      <Text>Close the briefing.</Text>
+    </Replace>
+    <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_CLOSE" Language="zh_Hans_CN">
+      <Text>关闭战情简报。</Text>
+    </Replace>
+  </LocalizedText>
+</GameData>
