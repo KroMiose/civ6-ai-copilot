@@ -68,15 +68,29 @@ npm run rc:check -- --manual-evidence "<manual-evidence.json>" --format markdown
 - Changenote：对应 GitHub release notes。
 - 语言：按 `docs/steam-workshop-copy.md` 分别填写 English 和 Simplified Chinese。不要把中文说明写入 English 语言页。
 
+默认更新规则：
+
+- 如果项目所有者没有特殊要求，SteamCMD 只更新 Mod 内容目录和 changenote。
+- SteamCMD VDF 默认只包含 `appid`、`publishedfileid`、`contentfolder`、`changenote`。
+- 正式发布必须同时包含 `contentfolder` 和 `changenote`，并在发布后验证公开 changelog 页面；SteamCMD 在没有内容变化时可能返回 `Success` 但不展示新的改动说明。
+- 不要在默认 SteamCMD VDF 中包含 `title`、`description`、`previewfile`、`visibility` 或 `language`，避免把网页维护的多语言内容覆盖成单语言。
+- 需要编辑标题、描述、预览图、可见性或语言页时，使用浏览器进入 Steam Workshop 编辑页，按 English 和 Simplified Chinese 分别更新和验证。
+
+SteamCMD 建议安装在长期目录，不放在 `/tmp`：
+
+```bash
+STEAMCMD_HOME="${STEAMCMD_HOME:-$HOME/Tools/steamcmd}"
+```
+
 流程：
 
 1. 使用 `npm run mod -- package --output-dir ./release --clean` 生成内容目录。
-2. 在 Civ6 开发工具中创建或选择 Workshop item。
-3. 设置标题、描述、标签、可见性、内容目录和预览图。
-4. 先使用 private 或 friends-only 可见性测试。
-5. 记录 `publishedfileid`。
-6. 邀请测试者订阅，验证 Additional Content、对局加载、战情简报、bridge/tuner-bridge 和多人公平。
-7. 通过测试后改为 public。
+2. 使用只包含内容目录和 changenote 的 SteamCMD VDF 更新 Workshop item。
+3. 先使用 private 或 friends-only 可见性测试。
+4. 记录 `publishedfileid`。
+5. 邀请测试者订阅，验证 Additional Content、对局加载、战情简报、bridge/tuner-bridge 和多人公平。
+6. 通过测试后改为 public。
+7. 如需更新标题、描述、标签、可见性或预览图，再进入网页编辑器处理。
 
 ### 语言填写
 

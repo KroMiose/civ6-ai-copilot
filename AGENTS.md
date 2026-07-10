@@ -13,6 +13,7 @@
 - 任何会影响关键设计的变更，先更新 `docs/project-definition.md` 的决策表或新增 ADR，再等待项目所有者确认。
 - macOS/Aspyr 真实游戏若没有 `Lua.log`，在玩家点击 Copilot 同步后使用 `npm run tuner-bridge -- --output-dir "<snapshot-dir>" --state civ6_ai_copilot` 读取 Mod 已缓存的分块。
 - 若用户声明游戏界面由用户自己操作，AI 不得再使用 Computer Use/GUI 点击；只给出需要用户点击的 Copilot 面板按钮，并在终端侧运行 bridge/tuner-bridge、validate、preflight、handoff。
+- Steam Workshop 默认发布只更新 Mod 内容和改动说明，并验证公开 changelog 页面。除非项目所有者明确要求，SteamCMD VDF 不得包含 `title`、`description`、`previewfile`、`visibility` 或 `language`，避免覆盖网页维护的多语言页面；若需要编辑标题、描述、预览图、可见性或多语言内容，必须使用浏览器逐语言操作和验证。
 
 ## 目录约定
 

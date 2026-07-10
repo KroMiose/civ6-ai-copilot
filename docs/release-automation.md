@@ -20,7 +20,7 @@ npm run rc:check -- --format markdown
 3. 手动运行 Release Candidate workflow，下载 `dist` artifacts 做实机验证。
 4. 按 `tests/manual/` 完成 Windows Civ6、多人公平和 Mac Agent handoff 手工 gate。
 5. 创建 `vX.Y.Z` tag，触发 Release workflow。
-6. GitHub Release 完成后，用同一个版本说明更新 Steam Workshop。
+6. GitHub Release 完成后，用 SteamCMD 更新 Steam Workshop 的 Mod 内容和 changenote；标题、描述、预览图、可见性和多语言页面默认不通过 SteamCMD 更新。
 
 ## 本地构建 artifacts
 
@@ -50,4 +50,27 @@ dist/
 
 ## Steam Workshop
 
-Steam 发布保持半自动：仓库负责生成 Mod 内容、描述、changenote 和校验材料；Steam 登录、Steam Guard、预览图、可见性切换和最终提交由发布负责人确认。不要把 Steam 账号密码、个人路径、日志或 Workshop 上传临时文件提交到仓库。
+Steam 发布保持半自动：仓库负责生成 Mod 内容、changenote 和校验材料；Steam 登录、Steam Guard、预览图、可见性切换和最终提交由发布负责人确认。不要把 Steam 账号密码、个人路径、日志或 Workshop 上传临时文件提交到仓库。
+
+默认 SteamCMD VDF 只允许包含：
+
+```text
+appid
+publishedfileid
+contentfolder
+changenote
+```
+
+正式发布必须同时包含 `contentfolder` 和 `changenote`，并在发布后打开公开 changelog 页面确认改动说明可见。SteamCMD 在没有内容变化时可能仍返回 `Success`，但不会生成公开 changelog；不要只凭命令退出码判断改动说明已展示。
+
+除非项目所有者明确要求，不要在 SteamCMD VDF 中写入 `title`、`description`、`previewfile`、`visibility` 或 `language`，避免覆盖 Steam 网页中分别维护的 English / Simplified Chinese 页面。
+
+需要更新标题、描述、预览图、可见性或多语言页面时，使用浏览器打开 Steam Workshop 编辑页，分别切换语言保存并验证。SteamCMD 不作为这些字段的默认编辑工具。
+
+本机 SteamCMD 应安装在长期目录，例如：
+
+```bash
+STEAMCMD_HOME="${STEAMCMD_HOME:-$HOME/Tools/steamcmd}"
+```
+
+不要把 SteamCMD 放在 `/tmp` 目录里长期使用，避免工具或缓存目录被清理后重新登录。
