@@ -69,12 +69,14 @@ export interface PackageManifest {
 
 const requiredFiles = [
   MODINFO_FILE,
+  "thumbnail.png",
   "ui/civ6_ai_copilot.xml",
   "ui/civ6_ai_copilot.lua",
   "text/civ6-ai-copilot-text.xml"
 ];
 
 const modInfoFilesSectionEntries = [
+  "thumbnail.png",
   "ui/civ6_ai_copilot.xml",
   "ui/civ6_ai_copilot.lua",
   "text/civ6-ai-copilot-text.xml"

@@ -7,6 +7,7 @@ const modInfoPath = path.resolve("mod/civ6-ai-copilot.modinfo");
 const modXmlPath = path.resolve("mod/ui/civ6_ai_copilot.xml");
 const modLuaPath = path.resolve("mod/ui/civ6_ai_copilot.lua");
 const modTextPath = path.resolve("mod/text/civ6-ai-copilot-text.xml");
+const modThumbnailPath = path.resolve("mod/thumbnail.png");
 
 test("modinfo registers a passive InGame UI context and required files", async () => {
   const modInfo = await readFile(modInfoPath, "utf8");
@@ -19,10 +20,12 @@ test("modinfo registers a passive InGame UI context and required files", async (
   assert.match(modInfo, /<File>ui\/civ6_ai_copilot\.lua<\/File>/);
   assert.match(modInfo, /<File>ui\/civ6_ai_copilot\.xml<\/File>/);
   assert.match(modInfo, /<File>text\/civ6-ai-copilot-text\.xml<\/File>/);
+  assert.match(modInfo, /<File>thumbnail\.png<\/File>/);
 
   await stat(modXmlPath);
   await stat(modLuaPath);
   await stat(modTextPath);
+  await stat(modThumbnailPath);
 });
 
 test("modinfo injects the Copilot XML directly so Civ6 loads the paired Lua context", async () => {

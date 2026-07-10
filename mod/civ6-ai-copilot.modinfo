@@ -43,6 +43,7 @@
   </LocalizedText>
 
   <Files>
+    <File>thumbnail.png</File>
     <File>ui/civ6_ai_copilot.lua</File>
     <File>ui/civ6_ai_copilot.xml</File>
     <File>text/civ6-ai-copilot-text.xml</File>

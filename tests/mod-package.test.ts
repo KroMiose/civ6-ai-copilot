@@ -21,6 +21,7 @@ test("mod package validator accepts the repository mod source", async () => {
   const validation = await validateModSource(sourceDir);
   assert.equal(validation.ok, true, JSON.stringify(validation, null, 2));
   assert.equal(validation.files.includes("civ6-ai-copilot.modinfo"), true);
+  assert.equal(validation.files.includes("thumbnail.png"), true);
   assert.equal(validation.files.includes("ui/civ6_ai_copilot.lua"), true);
   assert.equal(validation.files.includes("ui/civ6_ai_copilot.xml"), true);
   assert.equal(validation.files.includes("text/civ6-ai-copilot-text.xml"), true);
@@ -58,6 +59,7 @@ test("mod package command creates manifest and release folder", async () => {
     assert.equal(manifest.compatVersion, COMPAT_VERSION);
     assert.equal(manifest.workshopVersion, WORKSHOP_VERSION);
     assert.equal(manifest.files.some((file: { path: string }) => file.path === "civ6-ai-copilot.modinfo"), true);
+    assert.equal(manifest.files.some((file: { path: string }) => file.path === "thumbnail.png"), true);
     assert.equal(manifest.files.some((file: { path: string }) => file.path === "text/civ6-ai-copilot-text.xml"), true);
     assert.equal(manifest.files.some((file: { path: string }) => file.path === PACKAGE_CHECKLIST_FILE), true);
     assert.equal(manifest.files.every((file: { sha256: string; sizeBytes: number }) => /^[a-f0-9]{64}$/.test(file.sha256) && file.sizeBytes > 0), true);
