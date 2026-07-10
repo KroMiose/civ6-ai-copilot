@@ -1,6 +1,6 @@
 {
   "name": "civ6-ai-copilot",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Civilization VI player-visible information bridge, desktop tools, and AI copilot skill.",
   "type": "module",

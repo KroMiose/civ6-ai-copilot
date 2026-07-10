@@ -2,7 +2,7 @@
 -- This file must stay read-only with respect to gameplay state. It only reads UI-visible data and exports chunks.
 
 local MOD_ID = "civ6-ai-copilot"
-local MOD_VERSION = "0.1.0"
+local MOD_VERSION = "0.1.1"
 local COMPAT_VERSION = "0.1"
 local SCHEMA_VERSION = "0.1.0"
 local PROTOCOL_VERSION = "0.1.0"
@@ -95,7 +95,20 @@ local ICON_PREVIEW_CANDIDATE_GROUPS = {
   }
 }
 local AUTO_SYNC_MIN_SECONDS = 2
+local AUTO_SYNC_DELAY_SECONDS = 1
 local VISIBLE_MAP_TILE_LIMIT = 1024
+local VISIBLE_MAP_PLOTS_PER_FRAME = 96
+local SNAPSHOT_HASH_BLOCKS_PER_FRAME = 64
+local SNAPSHOT_CHUNKS_PER_FRAME = 4
+local RAW_BYTES_PER_CHUNK = math.floor(CHUNK_SIZE / 4) * 3
+local PROGRESS_BAR_WIDTH = 336
+local TURN_BRIEF_MODULES = {
+  "cities", "units", "techs", "civics", "government", "policies", "resources", "diplomacyPublic", "visibleMap"
+}
+local MAP_BRIEF_MODULES = { "units", "visibleMap", "diplomacyPublic" }
+local FULL_BRIEF_MODULES = {
+  "meta", "localPlayer", "cities", "units", "techs", "civics", "government", "policies", "resources", "diplomacyPublic", "visibleMap", "notifications"
+}
 
 local bitlib = bit32 or bit
 local unpackValues = table.unpack or unpack
@@ -107,6 +120,10 @@ local iconPreviewBuilt = false
 local autoSyncEnabled = false
 local lastAutoSyncKey = nil
 local lastAutoSyncAt = 0
+local pendingAutoSync = nil
+local activeSyncJob = nil
+local copilotUpdateActive = false
+local onCopilotUpdate = nil
 
 local function safeCall(fn, fallback)
   local values = { pcall(fn) }
@@ -138,12 +155,58 @@ end
 local function setAutoSyncStatus(message)
   if Controls and Controls.AutoSyncStatusLabel then
     Controls.AutoSyncStatusLabel:SetText(message)
+    Controls.AutoSyncStatusLabel:SetHide(
+      message == nil
+      or message == ""
+      or message == lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF")
+      or message == "回合开始后自动汇总"
+    )
   end
 end
 
 local function refreshAutoSyncButton()
   if Controls and Controls.AutoSyncButton then
     Controls.AutoSyncButton:SetText(Locale.Lookup(autoSyncEnabled and "LOC_CIV6_AI_COPILOT_AUTO_SYNC_ON" or "LOC_CIV6_AI_COPILOT_AUTO_SYNC_OFF"))
+  end
+end
+
+local function setControlHidden(control, hidden)
+  if control and control.SetHide then
+    control:SetHide(hidden)
+  end
+end
+
+local function setSyncProgress(message, done, total)
+  if Controls == nil then
+    return
+  end
+
+  setControlHidden(Controls.SyncProgressLabel, false)
+  setControlHidden(Controls.SyncProgressTrack, false)
+  if Controls.SyncProgressLabel then
+    Controls.SyncProgressLabel:SetText(message or "正在汇总…")
+  end
+
+  local width = 1
+  if type(done) == "number" and type(total) == "number" and total > 0 then
+    local ratio = done / total
+    if ratio < 0 then ratio = 0 end
+    if ratio > 1 then ratio = 1 end
+    width = math.max(1, math.floor(PROGRESS_BAR_WIDTH * ratio))
+  end
+  if Controls.SyncProgressFill and Controls.SyncProgressFill.SetSizeX then
+    Controls.SyncProgressFill:SetSizeX(width)
+  end
+end
+
+local function clearSyncProgress()
+  if Controls == nil then
+    return
+  end
+  setControlHidden(Controls.SyncProgressLabel, true)
+  setControlHidden(Controls.SyncProgressTrack, true)
+  if Controls.SyncProgressFill and Controls.SyncProgressFill.SetSizeX then
+    Controls.SyncProgressFill:SetSizeX(1)
   end
 end
 
@@ -199,54 +262,88 @@ local function jsonObject(value)
   return value
 end
 
-local function jsonEncode(value)
+local function appendValue(out, value)
+  out[#out + 1] = value
+end
+
+local function jsonWrite(out, value)
   local valueType = type(value)
   if valueType == "nil" then
-    return "null"
+    appendValue(out, "null")
   elseif valueType == "boolean" then
-    return value and "true" or "false"
+    appendValue(out, value and "true" or "false")
   elseif valueType == "number" then
-    return tostring(value)
+    appendValue(out, tostring(value))
   elseif valueType == "string" then
-    return "\"" .. jsonEscape(value) .. "\""
+    appendValue(out, "\"")
+    appendValue(out, jsonEscape(value))
+    appendValue(out, "\"")
   elseif valueType == "table" then
-    local out = {}
     local jsonKind = jsonKinds[value]
     if jsonKind == "array" or (jsonKind == nil and isArray(value)) then
+      appendValue(out, "[")
       for index = 1, #value do
-        table.insert(out, jsonEncode(value[index]))
+        if index > 1 then
+          appendValue(out, ",")
+        end
+        jsonWrite(out, value[index])
       end
-      return "[" .. table.concat(out, ",") .. "]"
+      appendValue(out, "]")
+      return
     end
 
+    local first = true
+    appendValue(out, "{")
     for key, child in pairs(value) do
-      table.insert(out, "\"" .. jsonEscape(key) .. "\":" .. jsonEncode(child))
+      if first then
+        first = false
+      else
+        appendValue(out, ",")
+      end
+      appendValue(out, "\"")
+      appendValue(out, jsonEscape(key))
+      appendValue(out, "\":")
+      jsonWrite(out, child)
     end
-    return "{" .. table.concat(out, ",") .. "}"
+    appendValue(out, "}")
+  else
+    appendValue(out, "null")
   end
-  return "null"
+end
+
+local function jsonEncode(value)
+  local out = {}
+  jsonWrite(out, value)
+  return table.concat(out)
 end
 
 local base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
 local function base64Encode(data)
-  return ((data:gsub(".", function(x)
-    local byte = x:byte()
-    local bits = ""
-    for i = 8, 1, -1 do
-      bits = bits .. ((byte % 2 ^ i - byte % 2 ^ (i - 1) > 0) and "1" or "0")
-    end
-    return bits
-  end) .. "0000"):gsub("%d%d%d?%d?%d?%d?", function(x)
-    if #x < 6 then
-      return ""
-    end
-    local c = 0
-    for i = 1, 6 do
-      c = c + ((x:sub(i, i) == "1") and 2 ^ (6 - i) or 0)
-    end
-    return base64Chars:sub(c + 1, c + 1)
-  end) .. ({ "", "==", "=" })[#data % 3 + 1])
+  local out = {}
+  local length = #data
+  local index = 1
+  while index <= length do
+    local b1 = data:byte(index) or 0
+    local b2 = data:byte(index + 1)
+    local b3 = data:byte(index + 2)
+    local hasB2 = b2 ~= nil
+    local hasB3 = b3 ~= nil
+    b2 = b2 or 0
+    b3 = b3 or 0
+
+    local c1 = math.floor(b1 / 4)
+    local c2 = (b1 % 4) * 16 + math.floor(b2 / 16)
+    local c3 = (b2 % 16) * 4 + math.floor(b3 / 64)
+    local c4 = b3 % 64
+
+    appendValue(out, base64Chars:sub(c1 + 1, c1 + 1))
+    appendValue(out, base64Chars:sub(c2 + 1, c2 + 1))
+    appendValue(out, hasB2 and base64Chars:sub(c3 + 1, c3 + 1) or "=")
+    appendValue(out, hasB3 and base64Chars:sub(c4 + 1, c4 + 1) or "=")
+    index = index + 3
+  end
+  return table.concat(out)
 end
 
 local UINT32 = 4294967296
@@ -407,26 +504,83 @@ local sha256K = {
   0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 }
 
-local function sha256(message)
-  local h0, h1, h2, h3 = 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a
-  local h4, h5, h6, h7 = 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
-  local bitLength = #message * 8
-  message = message .. string.char(0x80)
-  while (#message % 64) ~= 56 do
-    message = message .. string.char(0)
+local function createSha256Hasher(message)
+  local messageLength = #message
+  local zeroPadding = (56 - ((messageLength + 1) % 64)) % 64
+  return {
+    message = message,
+    messageLength = messageLength,
+    zeroPadding = zeroPadding,
+    totalBlocks = (messageLength + 1 + zeroPadding + 8) / 64,
+    blockIndex = 0,
+    h0 = 0x6a09e667,
+    h1 = 0xbb67ae85,
+    h2 = 0x3c6ef372,
+    h3 = 0xa54ff53a,
+    h4 = 0x510e527f,
+    h5 = 0x9b05688c,
+    h6 = 0x1f83d9ab,
+    h7 = 0x5be0cd19,
+    done = false,
+    digest = nil
+  }
+end
+
+local function sha256HasherByte(hasher, position)
+  if position <= hasher.messageLength then
+    return hasher.message:byte(position) or 0
+  end
+  if position == hasher.messageLength + 1 then
+    return 0x80
+  end
+  if position <= hasher.messageLength + 1 + hasher.zeroPadding then
+    return 0
   end
 
-  local high = math.floor(bitLength / 4294967296)
-  local low = bitLength % 4294967296
-  message = message
-    .. string.char(rshift(high, 24), band(rshift(high, 16), 0xff), band(rshift(high, 8), 0xff), band(high, 0xff))
-    .. string.char(rshift(low, 24), band(rshift(low, 16), 0xff), band(rshift(low, 8), 0xff), band(low, 0xff))
+  local bitLength = hasher.messageLength * 8
+  local high = math.floor(bitLength / UINT32)
+  local low = bitLength % UINT32
+  local lengthByteIndex = position - (hasher.messageLength + 1 + hasher.zeroPadding)
+  if lengthByteIndex == 1 then return band(rshift(high, 24), 0xff) end
+  if lengthByteIndex == 2 then return band(rshift(high, 16), 0xff) end
+  if lengthByteIndex == 3 then return band(rshift(high, 8), 0xff) end
+  if lengthByteIndex == 4 then return band(high, 0xff) end
+  if lengthByteIndex == 5 then return band(rshift(low, 24), 0xff) end
+  if lengthByteIndex == 6 then return band(rshift(low, 16), 0xff) end
+  if lengthByteIndex == 7 then return band(rshift(low, 8), 0xff) end
+  return band(low, 0xff)
+end
 
-  for offset = 1, #message, 64 do
+local function finishSha256Hasher(hasher)
+  hasher.done = true
+  hasher.digest = wordToHex(hasher.h0)
+    .. wordToHex(hasher.h1)
+    .. wordToHex(hasher.h2)
+    .. wordToHex(hasher.h3)
+    .. wordToHex(hasher.h4)
+    .. wordToHex(hasher.h5)
+    .. wordToHex(hasher.h6)
+    .. wordToHex(hasher.h7)
+  return hasher.digest
+end
+
+local function stepSha256Hasher(hasher, maxBlocks)
+  if hasher.done then
+    return true, hasher.digest
+  end
+
+  local processed = 0
+  while hasher.blockIndex < hasher.totalBlocks and processed < maxBlocks do
+    local offset = hasher.blockIndex * 64 + 1
     local w = {}
     for i = 0, 15 do
       local j = offset + i * 4
-      w[i] = add32(message:byte(j) * 0x1000000, message:byte(j + 1) * 0x10000, message:byte(j + 2) * 0x100, message:byte(j + 3))
+      w[i] = add32(
+        sha256HasherByte(hasher, j) * 0x1000000,
+        sha256HasherByte(hasher, j + 1) * 0x10000,
+        sha256HasherByte(hasher, j + 2) * 0x100,
+        sha256HasherByte(hasher, j + 3)
+      )
     end
     for i = 16, 63 do
       local s0 = bxor(rrotate(w[i - 15], 7), rrotate(w[i - 15], 18), rshift(w[i - 15], 3))
@@ -434,7 +588,7 @@ local function sha256(message)
       w[i] = add32(w[i - 16], s0, w[i - 7], s1)
     end
 
-    local a, b, c, d, e, f, g, h = h0, h1, h2, h3, h4, h5, h6, h7
+    local a, b, c, d, e, f, g, h = hasher.h0, hasher.h1, hasher.h2, hasher.h3, hasher.h4, hasher.h5, hasher.h6, hasher.h7
     for i = 0, 63 do
       local s1 = bxor(rrotate(e, 6), rrotate(e, 11), rrotate(e, 25))
       local ch = bxor(band(e, f), band(bnot(e), g))
@@ -445,18 +599,26 @@ local function sha256(message)
       h, g, f, e, d, c, b, a = g, f, e, add32(d, temp1), c, b, a, add32(temp1, temp2)
     end
 
-    h0, h1, h2, h3 = add32(h0, a), add32(h1, b), add32(h2, c), add32(h3, d)
-    h4, h5, h6, h7 = add32(h4, e), add32(h5, f), add32(h6, g), add32(h7, h)
+    hasher.h0, hasher.h1, hasher.h2, hasher.h3 = add32(hasher.h0, a), add32(hasher.h1, b), add32(hasher.h2, c), add32(hasher.h3, d)
+    hasher.h4, hasher.h5, hasher.h6, hasher.h7 = add32(hasher.h4, e), add32(hasher.h5, f), add32(hasher.h6, g), add32(hasher.h7, h)
+    hasher.blockIndex = hasher.blockIndex + 1
+    processed = processed + 1
   end
 
-  return wordToHex(h0)
-    .. wordToHex(h1)
-    .. wordToHex(h2)
-    .. wordToHex(h3)
-    .. wordToHex(h4)
-    .. wordToHex(h5)
-    .. wordToHex(h6)
-    .. wordToHex(h7)
+  if hasher.blockIndex >= hasher.totalBlocks then
+    return true, finishSha256Hasher(hasher)
+  end
+  return false, nil
+end
+
+local function sha256(message)
+  local hasher = createSha256Hasher(message)
+  while true do
+    local done, digest = stepSha256Hasher(hasher, hasher.totalBlocks)
+    if done then
+      return digest
+    end
+  end
 end
 
 local function base64SelfTestOk()
@@ -1042,14 +1204,20 @@ local function visiblePlotResourceType(plot, localPlayerId)
   return nil
 end
 
-local function collectVisibleMap(localPlayerId)
-  local tiles = jsonArray({})
-  local visibleForeignUnits = jsonArray({})
-  local seenVisibleForeignUnitIds = {}
-  local revealedTileCount = 0
-  local truncated = false
-  local bounds = nil
-  local visibility = safeCall(function()
+local function createVisibleMapCollector(localPlayerId)
+  local collector = {
+    tiles = jsonArray({}),
+    visibleForeignUnits = jsonArray({}),
+    seenVisibleForeignUnitIds = {},
+    revealedTileCount = 0,
+    truncated = false,
+    bounds = nil,
+    x = 0,
+    y = 0,
+    done = false
+  }
+
+  collector.visibility = safeCall(function()
     if PlayersVisibility and PlayersVisibility[localPlayerId] then
       return PlayersVisibility[localPlayerId]
     end
@@ -1059,44 +1227,77 @@ local function collectVisibleMap(localPlayerId)
     return nil
   end, nil)
 
-  local width, height = safeCall(function()
+  collector.width, collector.height = safeCall(function()
     return Map.GetGridSize()
   end, 0)
-  height = height or 0
-  if not visibility or not Map or width == 0 then
+  collector.width = collector.width or 0
+  collector.height = collector.height or 0
+
+  function collector:result()
+    if not self.visibility or not Map or self.width == 0 then
+      return {
+        source = "lua-api",
+        visibility = "player-visible",
+        confidence = "low",
+        scope = "player-visible-revealed",
+        truncated = false,
+        tileLimit = VISIBLE_MAP_TILE_LIMIT,
+        revealedTileCount = 0,
+        tiles = self.tiles
+      }, self.visibleForeignUnits
+    end
+
     return {
       source = "lua-api",
       visibility = "player-visible",
-      confidence = "low",
+      confidence = "confirmed",
       scope = "player-visible-revealed",
-      truncated = false,
+      truncated = self.truncated,
       tileLimit = VISIBLE_MAP_TILE_LIMIT,
-      revealedTileCount = 0,
-      tiles = tiles
-    }
+      revealedTileCount = self.revealedTileCount,
+      bounds = self.bounds,
+      tiles = self.tiles
+    }, self.visibleForeignUnits
   end
 
-  for y = 0, height - 1 do
-    for x = 0, width - 1 do
+  function collector:progress()
+    local total = math.max(1, self.width * self.height)
+    local done = math.min(total, self.y * self.width + self.x)
+    return done, total
+  end
+
+  function collector:step(maxPlots)
+    if self.done then
+      return true
+    end
+    if not self.visibility or not Map or self.width == 0 then
+      self.done = true
+      return true
+    end
+
+    local processed = 0
+    while self.y < self.height and processed < maxPlots do
+      local x = self.x
+      local y = self.y
       local revealed = safeCall(function()
-        return visibility:IsRevealed(x, y)
+        return self.visibility:IsRevealed(x, y)
       end, false)
       if revealed then
-        revealedTileCount = revealedTileCount + 1
-        if bounds == nil then
-          bounds = { minX = x, maxX = x, minY = y, maxY = y }
+        self.revealedTileCount = self.revealedTileCount + 1
+        if self.bounds == nil then
+          self.bounds = { minX = x, maxX = x, minY = y, maxY = y }
         else
-          if x < bounds.minX then bounds.minX = x end
-          if x > bounds.maxX then bounds.maxX = x end
-          if y < bounds.minY then bounds.minY = y end
-          if y > bounds.maxY then bounds.maxY = y end
+          if x < self.bounds.minX then self.bounds.minX = x end
+          if x > self.bounds.maxX then self.bounds.maxX = x end
+          if y < self.bounds.minY then self.bounds.minY = y end
+          if y > self.bounds.maxY then self.bounds.maxY = y end
         end
 
-        if #tiles >= VISIBLE_MAP_TILE_LIMIT then
-          truncated = true
+        if #self.tiles >= VISIBLE_MAP_TILE_LIMIT then
+          self.truncated = true
         else
           local visibleNow = safeCall(function()
-            return visibility:IsVisible(x, y)
+            return self.visibility:IsVisible(x, y)
           end, false)
           local plot = safeCall(function()
             return Map.GetPlot(x, y)
@@ -1127,29 +1328,38 @@ local function collectVisibleMap(localPlayerId)
           end
           enrichTilePlanningFields(tile, plot)
           if visibleNow and plot then
-            local unitIds, tileVisibleForeignUnits = collectUnitsInVisiblePlot(plot, localPlayerId, seenVisibleForeignUnitIds)
+            local unitIds, tileVisibleForeignUnits = collectUnitsInVisiblePlot(plot, localPlayerId, self.seenVisibleForeignUnitIds)
             if #unitIds > 0 then
               tile.unitIds = unitIds
             end
-            appendMissingUnits(visibleForeignUnits, tileVisibleForeignUnits)
+            appendMissingUnits(self.visibleForeignUnits, tileVisibleForeignUnits)
           end
-          table.insert(tiles, tile)
+          table.insert(self.tiles, tile)
         end
       end
+
+      self.x = self.x + 1
+      if self.x >= self.width then
+        self.x = 0
+        self.y = self.y + 1
+      end
+      processed = processed + 1
     end
+
+    if self.y >= self.height then
+      self.done = true
+    end
+    return self.done
   end
 
-  return {
-    source = "lua-api",
-    visibility = "player-visible",
-    confidence = "confirmed",
-    scope = "player-visible-revealed",
-    truncated = truncated,
-    tileLimit = VISIBLE_MAP_TILE_LIMIT,
-    revealedTileCount = revealedTileCount,
-    bounds = bounds,
-    tiles = tiles
-  }, visibleForeignUnits
+  return collector
+end
+
+local function collectVisibleMap(localPlayerId)
+  local collector = createVisibleMapCollector(localPlayerId)
+  while not collector:step(1000000) do
+  end
+  return collector:result()
 end
 
 local function forEachGameInfoRow(tableName, typeField, callback)
@@ -1625,7 +1835,8 @@ local function collectEmptyDiplomacy()
   }
 end
 
-local function collectSnapshot(exportType, modules)
+local function collectSnapshot(exportType, modules, options)
+  options = options or {}
   local localPlayerId = getLocalPlayerId()
   local gameTurn = safeCall(function()
     return Game.GetCurrentGameTurn()
@@ -1642,7 +1853,12 @@ local function collectSnapshot(exportType, modules)
   local visibleMap = collectEmptyVisibleMap()
   local visibleForeignUnits = jsonArray({})
   if includeVisibleMap then
-    visibleMap, visibleForeignUnits = collectVisibleMap(localPlayerId)
+    if options.deferVisibleMap then
+      visibleMap = options.visibleMap or collectEmptyVisibleMap()
+      visibleForeignUnits = options.visibleForeignUnits or jsonArray({})
+    else
+      visibleMap, visibleForeignUnits = collectVisibleMap(localPlayerId)
+    end
   end
   if includeUnits then
     appendMissingUnits(units, visibleForeignUnits)
@@ -1721,26 +1937,26 @@ local function syncTriggerLabel(triggerKind)
   return "战情简报"
 end
 
-local function emitSnapshot(snapshot, triggerKind)
+local function createSnapshotEmitter(snapshot, triggerKind, json, checksumSha256)
   if not base64SelfTestOk() or not sha256SelfTestOk() then
     emitDiagnostic("export-blocked-self-test-failed")
     setStatus("简报汇总失败。")
     setLastExportStatus("最近汇总失败。")
-    return
+    return { failed = true }
   end
 
   triggerKind = triggerKind or "manual"
-  local json = jsonEncode(snapshot) .. "\n"
-  local encoded = base64Encode(json)
+  json = json or (jsonEncode(snapshot) .. "\n")
+  checksumSha256 = checksumSha256 or sha256(json)
   local exportId = snapshot.source.exportId
-  local chunkCount = math.ceil(#encoded / CHUNK_SIZE)
+  local chunkCount = math.ceil(#json / RAW_BYTES_PER_CHUNK)
   local begin = {
     protocolVersion = PROTOCOL_VERSION,
     exportId = exportId,
     schemaVersion = snapshot.schemaVersion,
     chunkCount = chunkCount,
     byteLength = #json,
-    checksumSha256 = sha256(json),
+    checksumSha256 = checksumSha256,
     encoding = "base64-json",
     createdAt = nowUtc()
   }
@@ -1760,26 +1976,33 @@ local function emitSnapshot(snapshot, triggerKind)
   }
   local diagnosticJson = jsonEncode(exportDiagnostic)
 
-  print(SNAPSHOT_BEGIN .. " " .. beginJson)
-  for index = 0, chunkCount - 1 do
-    local startIndex = index * CHUNK_SIZE + 1
-    local data = encoded:sub(startIndex, startIndex + CHUNK_SIZE - 1)
-    local chunkJson = jsonEncode({
-      exportId = exportId,
-      index = index,
-      data = data
-    })
-    table.insert(chunkJsons, chunkJson)
-    print(SNAPSHOT_CHUNK .. " " .. chunkJson)
-  end
-  print(SNAPSHOT_END .. " " .. endJson)
-  cacheLatestExport(begin, beginJson, chunkJsons, endJson, diagnosticJson)
-  emitDiagnostic("exported", {
-    exportId = exportId,
-    trigger = triggerKind,
+  return {
+    snapshot = snapshot,
+    triggerKind = triggerKind,
+    json = json,
+    begin = begin,
+    beginJson = beginJson,
+    chunkJsons = chunkJsons,
+    endJson = endJson,
+    diagnosticJson = diagnosticJson,
     chunkCount = chunkCount,
-    byteLength = #json,
-    checksumSha256 = begin.checksumSha256
+    chunkIndex = 0,
+    beginEmitted = false,
+    done = false
+  }
+end
+
+local function finishSnapshotEmission(emitter)
+  local snapshot = emitter.snapshot
+  local triggerKind = emitter.triggerKind
+  print(SNAPSHOT_END .. " " .. emitter.endJson)
+  cacheLatestExport(emitter.begin, emitter.beginJson, emitter.chunkJsons, emitter.endJson, emitter.diagnosticJson)
+  emitDiagnostic("exported", {
+    exportId = emitter.begin.exportId,
+    trigger = triggerKind,
+    chunkCount = emitter.chunkCount,
+    byteLength = emitter.begin.byteLength,
+    checksumSha256 = emitter.begin.checksumSha256
   })
   local gameTurn = snapshot and snapshot.session and snapshot.session.gameTurn or nil
   local turnText = type(gameTurn) == "number" and (" · 第 " .. tostring(gameTurn) .. " 回合") or ""
@@ -1792,18 +2015,219 @@ local function emitSnapshot(snapshot, triggerKind)
   return true
 end
 
+local function stepSnapshotEmitter(emitter, maxChunks)
+  if emitter == nil or emitter.failed then
+    return true, false
+  end
+  if emitter.done then
+    return true, true
+  end
+
+  if not emitter.beginEmitted then
+    print(SNAPSHOT_BEGIN .. " " .. emitter.beginJson)
+    emitter.beginEmitted = true
+  end
+
+  local emitted = 0
+  while emitter.chunkIndex < emitter.chunkCount and emitted < maxChunks do
+    local startIndex = emitter.chunkIndex * RAW_BYTES_PER_CHUNK + 1
+    local data = base64Encode(emitter.json:sub(startIndex, startIndex + RAW_BYTES_PER_CHUNK - 1))
+    local chunkJson = jsonEncode({
+      exportId = emitter.begin.exportId,
+      index = emitter.chunkIndex,
+      data = data
+    })
+    table.insert(emitter.chunkJsons, chunkJson)
+    print(SNAPSHOT_CHUNK .. " " .. chunkJson)
+    emitter.chunkIndex = emitter.chunkIndex + 1
+    emitted = emitted + 1
+  end
+
+  setSyncProgress(
+    "正在写入简报 " .. tostring(emitter.chunkIndex) .. "/" .. tostring(emitter.chunkCount),
+    emitter.chunkIndex,
+    emitter.chunkCount
+  )
+
+  if emitter.chunkIndex >= emitter.chunkCount then
+    emitter.done = true
+    return true, finishSnapshotEmission(emitter)
+  end
+  return false, nil
+end
+
+local function emitSnapshot(snapshot, triggerKind)
+  setSyncProgress("正在编码简报…", 0, 1)
+  local json = jsonEncode(snapshot) .. "\n"
+  setSyncProgress("正在校验简报…", 0, 1)
+  local checksumSha256 = sha256(json)
+  local emitter = createSnapshotEmitter(snapshot, triggerKind, json, checksumSha256)
+  if emitter.failed then
+    clearSyncProgress()
+    return false
+  end
+  while true do
+    local done, exported = stepSnapshotEmitter(emitter, emitter.chunkCount)
+    if done then
+      clearSyncProgress()
+      return exported
+    end
+  end
+end
+
+local function syncJobLabel(triggerKind)
+  if triggerKind == "manual-visible-map" then
+    return "地图情报"
+  end
+  if triggerKind == "manual-modules" then
+    return "专题情报"
+  end
+  if triggerKind == "manual-full" then
+    return "完整战情"
+  end
+  if triggerKind == "auto-turn" then
+    return "自动汇总"
+  end
+  return "回合情报"
+end
+
+local function stopCopilotUpdateIfIdle()
+  if copilotUpdateActive and activeSyncJob == nil and pendingAutoSync == nil and ContextPtr and ContextPtr.ClearUpdate then
+    ContextPtr:ClearUpdate()
+    copilotUpdateActive = false
+  end
+end
+
+local function startCopilotUpdate()
+  if ContextPtr and ContextPtr.SetUpdate and onCopilotUpdate ~= nil then
+    ContextPtr:SetUpdate(onCopilotUpdate)
+    copilotUpdateActive = true
+    return true
+  end
+  return false
+end
+
+local function finishActiveSyncJob(exported)
+  local job = activeSyncJob
+  activeSyncJob = nil
+  clearSyncProgress()
+  if job and job.onComplete then
+    job.onComplete(exported == true, job)
+  end
+  stopCopilotUpdateIfIdle()
+  return exported == true
+end
+
+local function stepActiveSyncJob()
+  local job = activeSyncJob
+  if job == nil then
+    stopCopilotUpdateIfIdle()
+    return
+  end
+
+  if job.phase == "prepare" then
+    setStatus("正在准备" .. syncJobLabel(job.triggerKind) .. "…")
+    setSyncProgress("正在准备…", 0, 1)
+    job.snapshot = collectSnapshot(job.exportType, job.modules, { deferVisibleMap = job.includeVisibleMap })
+    if job.includeVisibleMap then
+      job.mapCollector = createVisibleMapCollector(job.localPlayerId)
+      job.phase = "map"
+    else
+      job.phase = "encode"
+    end
+    return
+  end
+
+  if job.phase == "map" then
+    local done = job.mapCollector:step(VISIBLE_MAP_PLOTS_PER_FRAME)
+    local donePlots, totalPlots = job.mapCollector:progress()
+    setSyncProgress("正在扫描地图 " .. tostring(donePlots) .. "/" .. tostring(totalPlots), donePlots, totalPlots)
+    if done then
+      local visibleMap, visibleForeignUnits = job.mapCollector:result()
+      job.snapshot.visibleMap = visibleMap
+      if hasModule(job.modules, "units") then
+        appendMissingUnits(job.snapshot.units, visibleForeignUnits)
+      end
+      job.phase = "encode"
+    end
+    return
+  end
+
+  if job.phase == "encode" then
+    setStatus("正在编码" .. syncJobLabel(job.triggerKind) .. "…")
+    setSyncProgress("正在编码简报…", 0, 1)
+    job.json = jsonEncode(job.snapshot) .. "\n"
+    job.hasher = createSha256Hasher(job.json)
+    job.phase = "hash"
+    return
+  end
+
+  if job.phase == "hash" then
+    local done, digest = stepSha256Hasher(job.hasher, SNAPSHOT_HASH_BLOCKS_PER_FRAME)
+    setSyncProgress(
+      "正在校验简报 " .. tostring(job.hasher.blockIndex) .. "/" .. tostring(job.hasher.totalBlocks),
+      job.hasher.blockIndex,
+      job.hasher.totalBlocks
+    )
+    if done then
+      job.checksumSha256 = digest
+      job.phase = "emit"
+    end
+    return
+  end
+
+  if job.phase == "emit" then
+    if job.emitter == nil then
+      job.emitter = createSnapshotEmitter(job.snapshot, job.triggerKind, job.json, job.checksumSha256)
+      if job.emitter.failed then
+        finishActiveSyncJob(false)
+        return
+      end
+    end
+    local done, exported = stepSnapshotEmitter(job.emitter, SNAPSHOT_CHUNKS_PER_FRAME)
+    if done then
+      finishActiveSyncJob(exported)
+    end
+  end
+end
+
+local function startSyncJob(exportType, modules, triggerKind, onComplete)
+  if activeSyncJob ~= nil then
+    setStatus("已有简报正在汇总，请稍候。")
+    setSyncProgress("已有汇总任务正在进行…", 0, 1)
+    return false
+  end
+
+  local localPlayerId = getLocalPlayerId()
+  activeSyncJob = {
+    exportType = exportType,
+    modules = modules,
+    triggerKind = triggerKind,
+    onComplete = onComplete,
+    localPlayerId = localPlayerId,
+    includeVisibleMap = hasModule(modules, "visibleMap"),
+    phase = "prepare"
+  }
+  setStatus("正在排队" .. syncJobLabel(triggerKind) .. "…")
+  setSyncProgress("正在排队…", 0, 1)
+  if not startCopilotUpdate() then
+    repeat
+      stepActiveSyncJob()
+    until activeSyncJob == nil
+  end
+  return true
+end
+
 local function syncTurn(triggerKind)
-  return emitSnapshot(collectSnapshot("turn", withCoreModules({
-    "cities", "units", "techs", "civics", "government", "policies", "resources", "diplomacyPublic", "visibleMap"
-  })), triggerKind or "manual-turn")
+  return startSyncJob("turn", withCoreModules(TURN_BRIEF_MODULES), triggerKind or "manual-turn")
 end
 
 local function syncVisibleMap()
-  return emitSnapshot(collectSnapshot("visible-map", withCoreModules({ "units", "visibleMap", "diplomacyPublic" })), "manual-visible-map")
+  return startSyncJob("visible-map", withCoreModules(MAP_BRIEF_MODULES), "manual-visible-map")
 end
 
 local function syncModules(extraModules)
-  return emitSnapshot(collectSnapshot("modules", withCoreModules(extraModules)), "manual-modules")
+  return startSyncJob("modules", withCoreModules(extraModules), "manual-modules")
 end
 
 local function syncCities()
@@ -1831,9 +2255,7 @@ local function syncDiplomacy()
 end
 
 local function forceFull()
-  return emitSnapshot(collectSnapshot("full", withCoreModules({
-    "meta", "localPlayer", "cities", "units", "techs", "civics", "government", "policies", "resources", "diplomacyPublic", "visibleMap", "notifications"
-  })), "manual-full")
+  return startSyncJob("full", withCoreModules(FULL_BRIEF_MODULES), "manual-full")
 end
 
 local function autoSyncTurnKey()
@@ -1858,7 +2280,56 @@ end
 local function resetAutoSyncDedupe()
   lastAutoSyncKey = nil
   lastAutoSyncAt = 0
-  setAutoSyncStatus(autoSyncEnabled and "本地玩家回合开始时自动汇总" or lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF"))
+  pendingAutoSync = nil
+  setAutoSyncStatus(autoSyncEnabled and "回合开始后自动汇总" or lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF"))
+end
+
+local function completePendingAutoSync()
+  local pending = pendingAutoSync
+  pendingAutoSync = nil
+  if pending == nil then
+    return false
+  end
+  if not autoSyncEnabled then
+    setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF"))
+    return false
+  end
+  if lastAutoSyncKey == pending.key then
+    setAutoSyncStatus("本回合简报已汇总")
+    return false
+  end
+
+  setAutoSyncStatus("正在自动汇总…")
+  return startSyncJob("turn", withCoreModules(TURN_BRIEF_MODULES), "auto-turn", function(exported)
+    if exported then
+      lastAutoSyncKey = pending.key
+      lastAutoSyncAt = os.time()
+      emitDiagnostic("auto-sync-exported", {
+        autoSyncKey = pending.key,
+        localPlayerId = pending.localPlayerId,
+        gameTurn = pending.gameTurn,
+        mode = "deferred-progress"
+      })
+      setAutoSyncStatus("已自动汇总第 " .. tostring(pending.gameTurn) .. " 回合简报")
+    end
+  end)
+end
+
+onCopilotUpdate = function()
+  if activeSyncJob ~= nil then
+    stepActiveSyncJob()
+    return
+  end
+
+  if pendingAutoSync ~= nil then
+    if os.time() < pendingAutoSync.runAt then
+      return
+    end
+    completePendingAutoSync()
+    return
+  end
+
+  stopCopilotUpdateIfIdle()
 end
 
 local function tryAutoSyncTurn()
@@ -1874,6 +2345,10 @@ local function tryAutoSyncTurn()
   end
 
   local key, localPlayerId, gameTurn = autoSyncTurnKey()
+  if pendingAutoSync ~= nil and pendingAutoSync.key == key then
+    setAutoSyncStatus("本回合简报已排队")
+    return false
+  end
   if lastAutoSyncKey == key then
     emitDiagnostic("auto-sync-skipped", {
       skipReason = "duplicate-turn",
@@ -1897,18 +2372,24 @@ local function tryAutoSyncTurn()
     return false
   end
 
-  local exported = syncTurn("auto-turn")
-  if exported then
-    lastAutoSyncKey = key
-    lastAutoSyncAt = now
-    emitDiagnostic("auto-sync-exported", {
-      autoSyncKey = key,
-      localPlayerId = localPlayerId,
-      gameTurn = gameTurn
-    })
-    setAutoSyncStatus("已自动汇总第 " .. tostring(gameTurn) .. " 回合简报")
+  pendingAutoSync = {
+    key = key,
+    localPlayerId = localPlayerId,
+    gameTurn = gameTurn,
+    runAt = now + AUTO_SYNC_DELAY_SECONDS
+  }
+  emitDiagnostic("auto-sync-scheduled", {
+    autoSyncKey = key,
+    localPlayerId = localPlayerId,
+    gameTurn = gameTurn,
+    delaySeconds = AUTO_SYNC_DELAY_SECONDS,
+    mode = "deferred-progress"
+  })
+  setAutoSyncStatus("本回合简报已排队")
+  if not startCopilotUpdate() then
+    return completePendingAutoSync()
   end
-  return exported
+  return true
 end
 
 local function toggleAutoSync()
@@ -1916,10 +2397,12 @@ local function toggleAutoSync()
   refreshAutoSyncButton()
   if autoSyncEnabled then
     resetAutoSyncDedupe()
-    setStatus("本地玩家回合开始时自动汇总简报。")
-    setAutoSyncStatus("本地玩家回合开始时自动汇总")
+    setStatus("本地玩家回合开始后自动汇总简报。")
+    setAutoSyncStatus("回合开始后自动汇总")
     emitDiagnostic("auto-sync-enabled")
   else
+    pendingAutoSync = nil
+    stopCopilotUpdateIfIdle()
     setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF"))
     setStatus(lookupText("LOC_CIV6_AI_COPILOT_STATUS_READY"))
     emitDiagnostic("auto-sync-disabled")

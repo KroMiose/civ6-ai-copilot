@@ -323,10 +323,10 @@
     </Replace>
 
     <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_AUTO_SYNC" Language="en_US">
-      <Text>When enabled, prepares one turn brief at the start of the local player's turn. Off by default.</Text>
+      <Text>When enabled, queues one turn brief after the local player's turn starts and shows progress while it is prepared. Off by default.</Text>
     </Replace>
     <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_AUTO_SYNC" Language="zh_Hans_CN">
-      <Text>开启后，仅在本地玩家回合开始时自动汇总一次本回合情报。默认关闭。</Text>
+      <Text>开启后，在本地玩家回合开始后排队汇总一次简报，并在汇总过程中显示进度。默认关闭。</Text>
     </Replace>
 
     <Replace Tag="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_CITIES" Language="en_US">

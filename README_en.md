@@ -92,4 +92,4 @@ If your multiplayer room restricts UI or utility Mods, follow the room rules fir
 
 - [Developer and maintainer docs](docs/README.md)
 
-Current version: `0.1.0`.
+Current version: `0.1.1`.

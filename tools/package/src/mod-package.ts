@@ -419,17 +419,30 @@ function validateLuaAutoSyncSurface(lua: string, issues: string[]): void {
     /local autoSyncEnabled = false/,
     /local function tryAutoSyncTurn/,
     /local function toggleAutoSync/,
+    /local function startSyncJob/,
+    /local function createVisibleMapCollector/,
+    /local SNAPSHOT_HASH_BLOCKS_PER_FRAME = 64/,
+    /local RAW_BYTES_PER_CHUNK = math\.floor\(CHUNK_SIZE \/ 4\) \* 3/,
+    /local function createSha256Hasher/,
+    /local function stepSha256Hasher/,
     /Controls\.AutoSyncButton:RegisterCallback\(Mouse\.eLClick, toggleAutoSync\)/,
     /Events\.LocalPlayerTurnBegin\.Add\(tryAutoSyncTurn\)/,
-    /syncTurn\("auto-turn"\)/,
+    /startSyncJob\("turn", withCoreModules\(TURN_BRIEF_MODULES\), "auto-turn"/,
+    /ContextPtr:SetUpdate\(onCopilotUpdate\)/,
+    /ContextPtr:ClearUpdate\(\)/,
     /emitDiagnostic\("auto-sync-enabled"/,
     /emitDiagnostic\("auto-sync-disabled"/,
     /emitDiagnostic\("auto-sync-skipped"/,
+    /emitDiagnostic\("auto-sync-scheduled"/,
     /emitDiagnostic\("auto-sync-exported"/
   ];
 
   if (!requiredPatterns.every((pattern) => pattern.test(lua))) {
     issues.push("ui/civ6_ai_copilot.lua must support optional auto turn sync diagnostics without bypassing syncTurn");
+  }
+
+  if (/local encoded = base64Encode\(json\)/.test(lua)) {
+    issues.push("ui/civ6_ai_copilot.lua must not base64-encode the whole snapshot before chunk emission");
   }
 }
 

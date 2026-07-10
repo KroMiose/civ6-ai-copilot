@@ -3,27 +3,31 @@
   <Container ID="CIV6_AI_COPILOT_Root" Size="parent,parent" ConsumeMouse="0">
     <Label ID="XmlLoadedLabel" Anchor="L,T" Offset="326,82" Size="340,26" Style="ShellOptionText" String="LOC_CIV6_AI_COPILOT_STATUS_XML_LOADED" />
 
-    <Grid ID="CopilotPanel" Anchor="L,T" Offset="326,82" Size="398,406" Style="WindowFrameHUD" Hidden="1" ConsumeMouse="1">
+    <Grid ID="CopilotPanel" Anchor="L,T" Offset="326,82" Size="398,400" Style="WindowFrameHUD" Hidden="1" ConsumeMouse="1">
       <Label ID="SubtitleLabel" Hidden="1" Size="0,0" Style="ShellOptionText" String="LOC_CIV6_AI_COPILOT_SUBTITLE" />
       <Label ID="BridgeHintLabel" Hidden="1" Size="0,0" Style="ShellOptionText" String="LOC_CIV6_AI_COPILOT_BRIDGE_HINT_AFTER_SYNC" />
       <Grid Anchor="C,C" Size="parent-26,parent-26" Style="SubContainer4" Color="0,0,0,95">
         <Grid Anchor="C,T" Offset="0,8" Size="parent-18,42" Texture="Controls_SubHeader2" SliceCorner="20,2" SliceTextureSize="40,40" Color="255,255,255,180">
           <Label ID="TitleLabel" Anchor="C,C" Style="WindowHeader" String="LOC_CIV6_AI_COPILOT_TITLE" />
         </Grid>
-        <Stack ID="PanelStack" Anchor="C,T" Offset="0,58" Size="360,320" StackGrowth="Down" Padding="3">
-          <Grid ID="StatusCard" Anchor="C,T" Size="360,50" Texture="Controls_SubContainerFill" SliceCorner="11,11" SliceSize="0,0" Color="0,0,0,70">
-            <Stack Anchor="L,C" Offset="12,0" Size="336,40" StackGrowth="Down" Padding="2">
+        <Stack ID="PanelStack" Anchor="C,T" Offset="0,58" Size="360,316" StackGrowth="Down" Padding="5">
+          <Grid ID="StatusCard" Anchor="C,T" Size="360,82" Texture="Controls_SubContainerFill" SliceCorner="11,11" SliceSize="0,0" Color="0,0,0,70">
+            <Stack Anchor="L,C" Offset="12,0" Size="336,72" StackGrowth="Down" Padding="2">
               <Label ID="StatusLabel" Style="FontNormal16" Size="336,20" String="LOC_CIV6_AI_COPILOT_STATUS_XML_LOADED" />
               <Label ID="LastExportLabel" Style="FontNormal14" Size="336,18" String="LOC_CIV6_AI_COPILOT_LAST_EXPORT_NONE" />
+              <Label ID="SyncProgressLabel" Hidden="1" Style="FontNormal14" Size="336,16" String="" />
+              <Grid ID="SyncProgressTrack" Hidden="1" Size="336,8" Texture="Controls_SubContainerFill" SliceCorner="4,4" SliceSize="0,0" Color="255,255,255,50">
+                <Grid ID="SyncProgressFill" Anchor="L,C" Size="1,8" Texture="Controls_SubContainerFill" SliceCorner="4,4" SliceSize="0,0" Color="89,181,233,190" />
+              </Grid>
             </Stack>
           </Grid>
-          <Stack ID="PrimarySyncRow" Size="360,37" StackGrowth="Right" Padding="8">
-            <GridButton ID="SyncTurnButton" Size="176,36" Style="MainButton" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_SYNC_TURN" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_TURN" />
-            <GridButton ID="SyncMapButton" Size="176,36" Style="MainButton" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_SYNC_MAP" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_MAP" />
+          <Stack ID="PrimarySyncRow" Size="360,35" StackGrowth="Right" Padding="8">
+            <GridButton ID="SyncTurnButton" Size="176,34" Style="MainButton" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_SYNC_TURN" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_TURN" />
+            <GridButton ID="SyncMapButton" Size="176,34" Style="MainButton" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_SYNC_MAP" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_MAP" />
           </Stack>
-          <GridButton ID="AutoSyncButton" Size="360,32" Style="ButtonControl" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_AUTO_SYNC_OFF" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_AUTO_SYNC" />
-          <Label ID="AutoSyncStatusLabel" Hidden="1" Size="0,0" Style="FontNormal14" String="LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF" />
-          <Label ID="SelectiveSyncLabel" Style="FontNormal14" Size="360,20" String="LOC_CIV6_AI_COPILOT_SELECTIVE_SYNC" />
+          <GridButton ID="AutoSyncButton" Size="360,28" Style="ButtonControl" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_AUTO_SYNC_OFF" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_AUTO_SYNC" />
+          <Label ID="AutoSyncStatusLabel" Hidden="1" Size="360,16" Style="FontNormal14" Align="Center" String="LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF" />
+          <Label ID="SelectiveSyncLabel" Style="FontNormal14" Size="360,18" Align="Center" String="LOC_CIV6_AI_COPILOT_SELECTIVE_SYNC" />
           <Stack ID="SelectiveSyncRowOne" Size="360,30" StackGrowth="Right" Padding="6">
             <GridButton ID="SyncCitiesButton" Size="116,30" Style="ButtonControl" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_SYNC_CITIES" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_CITIES" />
             <GridButton ID="SyncUnitsButton" Size="116,30" Style="ButtonControl" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_SYNC_UNITS" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_UNITS" />
@@ -34,8 +38,8 @@
             <GridButton ID="SyncGovernmentButton" Size="116,30" Style="ButtonControl" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_SYNC_GOVERNMENT" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_GOVERNMENT" />
             <GridButton ID="SyncDiplomacyButton" Size="116,30" Style="ButtonControl" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_SYNC_DIPLOMACY" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_SYNC_DIPLOMACY" />
           </Stack>
-          <GridButton ID="ForceFullButton" Size="360,32" Style="ButtonControl" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_FORCE_FULL" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_FORCE_FULL" />
-          <GridButton ID="CloseButton" Size="360,30" Style="ButtonControl" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_CLOSE" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_CLOSE" />
+          <GridButton ID="ForceFullButton" Size="360,30" Style="ButtonControl" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_FORCE_FULL" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_FORCE_FULL" />
+          <GridButton ID="CloseButton" Size="360,28" Style="ButtonControl" FontStyle="Shadow" String="LOC_CIV6_AI_COPILOT_CLOSE" ToolTip="LOC_CIV6_AI_COPILOT_TOOLTIP_CLOSE" />
         </Stack>
       </Grid>
     </Grid>

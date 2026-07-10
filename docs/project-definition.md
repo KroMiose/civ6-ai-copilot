@@ -36,6 +36,7 @@
 | D-011 | 发布渠道 | GitHub release、Steam Workshop、Agent Skill package、统一 release bundle。 |
 | D-012 | 产品语言 | 用户可见文字遵循 `docs/product-language.md`：克制、专业、游戏内战情语境；README 提供简体中文和英文入口；Skill 按用户提问语言回答并使用对应 Civ6 本地化术语。 |
 | D-013 | 地图规划字段 | `visibleMap.tiles` 导出已揭示/当前可见地块的规划事实：地形、地貌、可见资源、河流边、淡水、丘陵/山脉/水域/悬崖、改良、路线、区域、吸引力和基础产出；字段缺失表示当前 API 未提供或当前玩家不可识别，不代表事实不存在。 |
+| D-014 | 汇总性能 | 地图扫描、checksum 校验和日志分块输出必须通过 UI update 分帧执行，并在面板显示进度；base64 只按当前输出 chunk 现算，自动汇总只排队任务，不在回合开始事件里同步跑完整导出。 |
 
 影响这些决策的变更需要先更新本表或新增 ADR，再进入实现。
 
@@ -118,7 +119,7 @@ flowchart LR
 
 ```json
 {
-  "version": "0.1.0",
+  "version": "0.1.1",
   "compatVersion": "0.1",
   "protocolVersion": "0.1.0",
   "schemaVersion": "0.1.0"

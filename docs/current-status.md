@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-- 项目版本：`0.1.0`
+- 项目版本：`0.1.1`
 - 兼容版本：`0.1`
 - 协议版本：`0.1.0`
 - Schema 版本：`0.1.0`
@@ -17,7 +17,7 @@
 - Civ6 被动 InGame UI Mod，`AffectsSavedGames=0`。
 - 左上 LaunchBar 副官入口与中文面板。
 - 「汇总本回合」「更新地图情报」「城市运营」「军事态势」「科技市政」「政体政策」「资源库存」「公开外交」「完整战情简报」。
-- 默认关闭的「回合开始自动汇总」，只在本地玩家回合开始时复用同一导出路径。
+- 默认关闭的「回合开始自动汇总」，在本地玩家回合开始后排队复用同一导出路径，并显示扫描、校验和写入进度。
 - `Lua.log` marker bridge 与 macOS/Aspyr `tuner-bridge` 读取缓存通道。
 - Snapshot schema、fairness 校验、doctor、preflight、summary、visible map render、handoff。
 - Agent Skill 安装、校验、打包和 Mod-first 情报更新引导。

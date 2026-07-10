@@ -1,7 +1,7 @@
 ---
 name: civ6-ai-copilot
 description: 读取 Civilization VI civ6-ai-copilot Mod 导出的本地玩家可见 snapshot，按游戏内「战情简报」按钮指导用户更新所需情报和排障，并按用户提问语言提供发展、城市、科技、市政、政策、军事、海军、定居和多人公平建议。
-version: 0.1.0
+version: 0.1.1
 compatVersion: "0.1"
 ---
 
@@ -81,7 +81,7 @@ npm run copilot -- --intent turn-priority --clean
 
 ## 自动汇总
 
-「回合开始自动汇总」默认关闭。开启后，Mod 只在本地玩家每回合开始时自动调用「汇总本回合」，并按玩家/回合去重；不会修改游戏状态，也不会导出隐藏信息。
+「回合开始自动汇总」默认关闭。开启后，Mod 在本地玩家每回合开始后排队调用「汇总本回合」，面板会显示扫描、校验和写入进度，并按玩家/回合去重；不会修改游戏状态，也不会导出隐藏信息。
 
 如果用户已开启自动汇总但没有新 `latest.json`，先让用户确认面板中的最近汇总状态，再运行标准入口读取最新缓存；需要排障时检查 `CIV6_AI_COPILOT_DIAGNOSTIC` 是否出现 `auto-sync-exported`、`auto-sync-skipped`、`auto-sync-enabled` 或 `auto-sync-disabled`。
 

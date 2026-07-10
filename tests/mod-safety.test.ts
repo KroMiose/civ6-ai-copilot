@@ -198,26 +198,57 @@ test("mod Lua supports optional automatic turn sync with local-turn dedupe", asy
   assert.match(lua, /local autoSyncEnabled = false/);
   assert.match(lua, /local lastAutoSyncKey = nil/);
   assert.match(lua, /local AUTO_SYNC_MIN_SECONDS = 2/);
+  assert.match(lua, /local AUTO_SYNC_DELAY_SECONDS = 1/);
+  assert.match(lua, /local VISIBLE_MAP_PLOTS_PER_FRAME = 96/);
+  assert.match(lua, /local SNAPSHOT_HASH_BLOCKS_PER_FRAME = 64/);
+  assert.match(lua, /local SNAPSHOT_CHUNKS_PER_FRAME = 4/);
+  assert.match(lua, /local RAW_BYTES_PER_CHUNK = math\.floor\(CHUNK_SIZE \/ 4\) \* 3/);
   assert.match(lua, /local function toggleAutoSync/);
   assert.match(lua, /local function tryAutoSyncTurn/);
+  assert.match(lua, /local function startSyncJob/);
+  assert.match(lua, /local function createVisibleMapCollector/);
+  assert.match(lua, /local function createSha256Hasher/);
+  assert.match(lua, /local function stepSha256Hasher/);
+  assert.match(lua, /ContextPtr:SetUpdate\(onCopilotUpdate\)/);
+  assert.match(lua, /ContextPtr:ClearUpdate\(\)/);
+  assert.doesNotMatch(lua, /ContextPtr:SetUpdate\(nil\)/);
   assert.match(lua, /autoSyncTurnKey\(\)/);
   assert.match(lua, /emitDiagnostic\("auto-sync-enabled"/);
   assert.match(lua, /emitDiagnostic\("auto-sync-disabled"/);
   assert.match(lua, /emitDiagnostic\("auto-sync-skipped"/);
+  assert.match(lua, /emitDiagnostic\("auto-sync-scheduled"/);
   assert.match(lua, /emitDiagnostic\("auto-sync-exported"/);
-  assert.match(lua, /syncTurn\("auto-turn"\)/);
+  assert.match(lua, /startSyncJob\("turn", withCoreModules\(TURN_BRIEF_MODULES\), "auto-turn"/);
   assert.match(lua, /Events\.LocalPlayerTurnBegin\.Add\(tryAutoSyncTurn\)/);
   assert.match(lua, /Events\.TurnBegin\.Add\(tryAutoSyncTurn\)/);
   assert.match(lua, /Events\.LocalPlayerChanged\.Add\(resetAutoSyncDedupe\)/);
 });
 
-test("mod Lua binds auto sync controls and keeps status visible in the panel", async () => {
+test("mod Lua binds auto sync controls and keeps progress visible without cluttering the idle panel", async () => {
   const lua = await readFile(modLuaPath, "utf8");
 
   assert.match(lua, /Controls\.AutoSyncButton:RegisterCallback\(Mouse\.eLClick, toggleAutoSync\)/);
   assert.match(lua, /Controls\.AutoSyncButton:SetText\(Locale\.Lookup\(autoSyncEnabled and "LOC_CIV6_AI_COPILOT_AUTO_SYNC_ON" or "LOC_CIV6_AI_COPILOT_AUTO_SYNC_OFF"\)\)/);
   assert.match(lua, /Controls\.AutoSyncStatusLabel:SetText/);
+  assert.match(lua, /Controls\.AutoSyncStatusLabel:SetHide/);
   assert.match(lua, /Controls\.LastExportLabel:SetText/);
+  assert.match(lua, /Controls\.SyncProgressLabel:SetText/);
+  assert.match(lua, /Controls\.SyncProgressFill:SetSizeX/);
+  const xml = await readFile(modXmlPath, "utf8");
+  assert.match(xml, /<Label ID="AutoSyncStatusLabel" Hidden="1" Size="360,16"[^>]*Align="Center"/);
+  assert.match(xml, /<Label ID="SelectiveSyncLabel"[^>]*Align="Center"/);
+  assert.match(xml, /ID="SyncProgressTrack"/);
+  assert.match(xml, /ID="SyncProgressFill"/);
+});
+
+test("mod Lua avoids full base64 conversion before emitting snapshot chunks", async () => {
+  const lua = await readFile(modLuaPath, "utf8");
+
+  assert.match(lua, /local function base64Encode\(data\)/);
+  assert.match(lua, /local data = base64Encode\(emitter\.json:sub\(startIndex, startIndex \+ RAW_BYTES_PER_CHUNK - 1\)\)/);
+  assert.match(lua, /chunkCount = math\.ceil\(#json \/ RAW_BYTES_PER_CHUNK\)/);
+  assert.doesNotMatch(lua, /local encoded = base64Encode\(json\)/);
+  assert.doesNotMatch(lua, /encoded = encoded/);
 });
 
 test("mod Lua SHA-256 self-test does not depend on Civ6 exposing bit32 or bit", async () => {
@@ -263,7 +294,7 @@ test("mod Lua exposes selective sync callbacks used by AI guidance", async () =>
     assert.match(lua, new RegExp(`Controls\\.${controlId}:RegisterCallback`));
   }
 
-  assert.match(lua, /collectSnapshot\("modules", withCoreModules/);
+  assert.match(lua, /startSyncJob\("modules", withCoreModules/);
   assert.match(lua, /"cities", "resources"/);
   assert.match(lua, /"government", "policies", "resources"/);
   assert.match(lua, /"visibleMap", "notifications"/);
@@ -288,13 +319,14 @@ test("mod Lua exports map visibility scope and truncation metadata", async () =>
   const lua = await readFile(modLuaPath, "utf8");
 
   assert.match(lua, /local VISIBLE_MAP_TILE_LIMIT = 1024/);
-  assert.match(lua, /revealedTileCount = revealedTileCount \+ 1/);
-  assert.match(lua, /if #tiles >= VISIBLE_MAP_TILE_LIMIT then/);
-  assert.match(lua, /truncated = true/);
+  assert.match(lua, /local function createVisibleMapCollector\(localPlayerId\)/);
+  assert.match(lua, /self\.revealedTileCount = self\.revealedTileCount \+ 1/);
+  assert.match(lua, /if #self\.tiles >= VISIBLE_MAP_TILE_LIMIT then/);
+  assert.match(lua, /self\.truncated = true/);
   assert.match(lua, /scope = "player-visible-revealed"/);
   assert.match(lua, /tileLimit = VISIBLE_MAP_TILE_LIMIT/);
-  assert.match(lua, /revealedTileCount = revealedTileCount/);
-  assert.match(lua, /collectSnapshot\("visible-map"/);
+  assert.match(lua, /revealedTileCount = self\.revealedTileCount/);
+  assert.match(lua, /startSyncJob\("visible-map"/);
   assert.match(lua, /"manual-visible-map"/);
 });
 
@@ -382,7 +414,7 @@ test("mod Lua marks empty schema objects and arrays explicitly for JSON encoding
   assert.match(lua, /policySlots = jsonObject\(\{\}\)/);
   assert.match(lua, /local cities = jsonArray\(\{\}\)/);
   assert.match(lua, /local units = jsonArray\(\{\}\)/);
-  assert.match(lua, /local tiles = jsonArray\(\{\}\)/);
+  assert.match(lua, /tiles = jsonArray\(\{\}\)/);
   assert.match(lua, /completed = jsonArray\(\{\}\)/);
   assert.match(lua, /available = jsonArray\(\{\}\)/);
   assert.match(lua, /policies = jsonArray\(\{\}\)/);

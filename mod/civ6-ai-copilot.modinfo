@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Mod id="8d2f71ce-6b34-4dbf-92da-cf7c2e21d2b7" version="3">
+<Mod id="8d2f71ce-6b34-4dbf-92da-cf7c2e21d2b7" version="4">
   <Properties>
     <Name>LOC_CIV6_AI_COPILOT_MOD_NAME</Name>
     <Stability>Beta</Stability>
     <Teaser>LOC_CIV6_AI_COPILOT_MOD_TEASER</Teaser>
     <Description>LOC_CIV6_AI_COPILOT_MOD_DESCRIPTION</Description>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <Authors>civ6-ai-copilot contributors</Authors>
     <EnabledByDefault>0</EnabledByDefault>
     <AffectsSavedGames>0</AffectsSavedGames>

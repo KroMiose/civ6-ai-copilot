@@ -32,7 +32,7 @@ CIV6_AI_COPILOT_SNAPSHOT_END {...}
 加载、自检、入口挂载和导出完成使用诊断行：
 
 ```text
-CIV6_AI_COPILOT_LOADED version=0.1.0
+CIV6_AI_COPILOT_LOADED version=0.1.1
 CIV6_AI_COPILOT_DIAGNOSTIC {...}
 ```
 
@@ -180,7 +180,7 @@ npm run tuner-bridge -- --output-dir "<snapshot-dir>" --state civ6_ai_copilot
 
 当前版本由 `project-version.json` 提供：
 
-- `version = 0.1.0`
+- `version = 0.1.1`
 - `compatVersion = 0.1`
 - `protocolVersion = 0.1.0`
 - `schemaVersion = 0.1.0`

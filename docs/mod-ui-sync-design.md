@@ -64,14 +64,21 @@
 
 ## 5. 自动汇总
 
-「回合开始自动汇总」默认关闭。开启后，Mod 只在本地玩家回合开始时调用现有「汇总本回合」导出路径，并按 `localPlayerId + gameTurn` 去重。
+「回合开始自动汇总」默认关闭。开启后，Mod 在本地玩家回合开始后排队调用现有「汇总本回合」导出路径，并按 `localPlayerId + gameTurn` 去重。汇总任务必须分帧执行并显示进度，避免在回合切换事件中长时间阻塞游戏 UI 或声音。
+
+分帧范围包括：
+
+- 可见地图扫描。
+- snapshot checksum 校验。
+- `Lua.log` 分块输出。
+- base64 只按当前输出 chunk 现算，不在写入前整包转换。
 
 约束：
 
 - 不新增采集路径。
 - 不调用 `Request*`、`Set*` 或 gameplay 修改 API。
 - 不改变 snapshot schema 主体。
-- 触发状态通过面板与 `CIV6_AI_COPILOT_DIAGNOSTIC` 记录。
+- 触发状态、排队状态和进度通过面板与 `CIV6_AI_COPILOT_DIAGNOSTIC` 记录。
 
 ## 6. Skill 协作
 
