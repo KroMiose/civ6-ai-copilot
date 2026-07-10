@@ -157,6 +157,50 @@ test("paths helper prints macOS and Linux Civ6 user-data candidates", () => {
   assert.equal(linux.modsDir, "/home/player/.local/share/Aspyr/Sid Meier's Civilization VI/Mods");
 });
 
+test("paths helper auto-detects Steam Proton Civ6 paths on Linux", () => {
+  const homeDir = mkdtempSync(path.join(os.tmpdir(), "civ6-ai-copilot-home-"));
+  try {
+    const steamUserDir = path.posix.join(
+      homeDir,
+      "data",
+      "SteamLibrary",
+      "steamapps",
+      "compatdata",
+      "289070",
+      "pfx",
+      "drive_c",
+      "users",
+      "steamuser"
+    );
+    const civ6UserDataDir = path.posix.join(steamUserDir, "Documents", "My Games", "Sid Meier's Civilization VI");
+    const logsDir = path.posix.join(
+      steamUserDir,
+      "AppData",
+      "Local",
+      "Firaxis Games",
+      "Sid Meier's Civilization VI",
+      "Logs"
+    );
+    mkdirSync(path.posix.join(civ6UserDataDir, "Mods"), { recursive: true });
+    mkdirSync(logsDir, { recursive: true });
+
+    const paths = buildCiv6AICopilotPaths({
+      platform: "linux",
+      homeDir
+    });
+
+    assert.equal(paths.civ6UserDataDir, civ6UserDataDir);
+    assert.equal(paths.modsDir, path.posix.join(civ6UserDataDir, "Mods"));
+    assert.equal(paths.logsDir, logsDir);
+    assert.equal(paths.luaLogPath, path.posix.join(logsDir, "Lua.log"));
+    assert.match(paths.commands.copilot, /npm run copilot -- --intent "turn-priority"/);
+    assert.match(paths.commands.bridgeOnce, /compatdata\/289070\/pfx\/drive_c/);
+    assert.match(paths.commands.doctor, /compatdata\/289070\/pfx\/drive_c/);
+  } finally {
+    rmSync(homeDir, { recursive: true, force: true });
+  }
+});
+
 test("paths helper can emit a Windows PowerShell smoke runbook", () => {
   const paths = buildCiv6AICopilotPaths({ platform: "win32", homeDir: "C:\\Users\\Player" });
   const script = formatCiv6AICopilotPathsPowerShell(paths);
