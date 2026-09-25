@@ -32,7 +32,7 @@ For later updates, copy this prompt:
 Please choose the highest-version release (including pre-releases) from https://github.com/KroMiose/civ6-ai-copilot/releases and update my civ6-ai-copilot Agent Skill and local helper tools. Validate the installation and tell me the installed version. The Mod and Skill must have the same compatVersion. If the Steam Workshop Mod has not updated yet, remind me to wait for the download and click Update Briefing in-game to create a new snapshot.
 ```
 
-When upgrading from `0.1.x` to the 0.3 protocol, update the Mod, Skill, and local tools together. Old snapshots cannot be used with the 0.3 protocol. From `0.3.5`, replace only the skill folder. The analysis program is inside that folder. An installed `0.3.1` Mod can stay in the game.
+When upgrading from `0.1.x` to the 0.3 protocol, update the Mod, Skill, and local tools together. Old snapshots cannot be used with the 0.3 protocol. From `0.3.6`, replace only the skill folder. The analysis program is inside that folder. An installed `0.3.1` Mod can stay in the game.
 
 ## First Use
 
@@ -85,4 +85,4 @@ If your multiplayer room restricts UI or utility Mods, follow the room rules fir
 
 - [Developer and maintainer docs](docs/README.md)
 
-Current pre-release version: `0.3.5`.
+Current pre-release version: `0.3.6`.

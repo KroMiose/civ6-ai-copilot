@@ -2,6 +2,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { renderHexPng } from "../../render-map/src/map-png.js";
 import { readableName, renderSnapshotMapObject, resourceClass } from "../../render-map/src/render-map.js";
+import { describeOwner } from "./decision-brief.js";
 
 export const MAX_MAP_RADIUS = 20;
 export const DEFAULT_MAP_RADIUS = { region: 8, local: 5 } as const;
@@ -158,9 +159,10 @@ function matchEntity(entities: Array<Record<string, any>>, value: string): { ent
   if (exactName.length === 1) return { entity: exactName[0]! };
   const contains = entities.filter((entity) => typeof entity.name === "string" && entity.name.includes(value));
   if (contains.length === 1) return { entity: contains[0]! };
-  const names = entities.map((entity) => entity.name).filter((name) => typeof name === "string");
-  if (exactName.length > 1 || contains.length > 1) return { error: `「${value}」对应多个目标：${names.join("、")}` };
-  return { error: `找不到「${value}」。可选：${names.join("、") || "无"}` };
+  const matched = exactName.length > 1 ? exactName : contains;
+  const label = (entity: Record<string, any>) => `${entity.name ?? entity.type ?? "未命名"} id=${entity.id ?? "?"} (${entity.x},${entity.y}) owner=${entity.ownerPlayerId ?? "?"}`;
+  if (matched.length > 1) return { error: `「${value}」对应多个目标：${matched.map(label).join("；")}` };
+  return { error: `找不到「${value}」。可选：${entities.map(label).join("；") || "无"}` };
 }
 
 function placesFor(
@@ -178,7 +180,7 @@ function placesFor(
       x: city.x,
       y: city.y,
       population: city.population,
-      owner: ownerName(snapshot, city.ownerPlayerId)
+      owner: describeOwner(city.ownerPlayerId, snapshot)
     })),
     units: units.map((unit) => ({
       name: unit.name,
@@ -186,7 +188,7 @@ function placesFor(
       type: readableName(text(unit.type)),
       x: unit.x,
       y: unit.y,
-      owner: ownerName(snapshot, unit.ownerPlayerId),
+      owner: describeOwner(unit.ownerPlayerId, snapshot),
       own: unit.visibility === "own",
       ...(level === "local" && unit.visibility === "own" ? { movesRemaining: unit.movesRemaining, combatStrength: unit.combatStrength, promotions: unit.promotions } : {})
     })),
@@ -331,13 +333,6 @@ function boundsOf(coords: Array<{ x: number; y: number }>): { minX: number; maxX
     minY: Math.min(...coords.map((coord) => coord.y)),
     maxY: Math.max(...coords.map((coord) => coord.y))
   };
-}
-
-function ownerName(snapshot: Record<string, any>, playerId: unknown): string {
-  if (playerId === snapshot.localPlayer?.localPlayerId) return readableName(text(snapshot.localPlayer?.civilizationType)) ?? "己方";
-  const met = arrayOf(snapshot.diplomacy?.metPlayers).find((player) => player.playerId === playerId);
-  if (!met) return "未知文明";
-  return readableName(text(met.civilizationType)) ?? readableName(text(met.leaderType)) ?? "未知文明";
 }
 
 function terrainColor(terrain: string | undefined, mountain: boolean): string {

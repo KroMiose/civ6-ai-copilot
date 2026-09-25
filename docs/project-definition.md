@@ -131,7 +131,7 @@ flowchart LR
 
 ```json
 {
-  "version": "0.3.5",
+  "version": "0.3.6",
   "compatVersion": "0.3",
   "protocolVersion": "0.3.0",
   "schemaVersion": "0.3.0"

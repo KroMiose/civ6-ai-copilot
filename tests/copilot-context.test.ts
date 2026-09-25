@@ -73,6 +73,9 @@ test("city and unit expansion keep non-zero player ids and one entity", async ()
     });
     assert.equal(report.brief?.player.id, 2);
     assert.equal(report.brief?.units.own[0]?.name, "Archer");
+    assert.equal(report.brief?.units.own[0]?.damage, 0);
+    assert.equal(report.brief?.units.visible[0]?.damage, 20);
+    assert.equal((report.brief?.units.visible[0]?.owner as { kind?: string }).kind, "major");
     assert.equal((report.detail?.city as { coverage?: string }).coverage, "1/1");
     assert.ok((report.detail?.city as { city?: { buildings?: unknown } }).city?.buildings);
     assert.equal((report.detail?.unit as { coverage?: string }).coverage, "1/2");

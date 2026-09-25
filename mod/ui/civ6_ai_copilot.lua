@@ -2,7 +2,7 @@
 -- This file must stay read-only with respect to gameplay state. It only reads UI-visible data and exports chunks.
 
 local MOD_ID = "civ6-ai-copilot"
-local MOD_VERSION = "0.3.5"
+local MOD_VERSION = "0.3.6"
 local COMPAT_VERSION = "0.3"
 local SCHEMA_VERSION = "0.3.0"
 local PROTOCOL_VERSION = "0.3.0"

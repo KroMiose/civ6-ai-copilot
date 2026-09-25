@@ -1,5 +1,4 @@
-#!/usr/bin/env tsx
-#!/usr/bin/env node
+import { createRequire } from "node:module"; const require = createRequire(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -12456,9 +12455,15 @@ function formatYields(yields) {
 import { existsSync as existsSync2, readFileSync } from "node:fs";
 import path2 from "node:path";
 import { fileURLToPath } from "node:url";
-var cwdVersionPath = path2.resolve("project-version.json");
-var sourceVersionPath = path2.resolve(path2.dirname(fileURLToPath(import.meta.url)), "../../../project-version.json");
-var versionPath = existsSync2(cwdVersionPath) ? cwdVersionPath : sourceVersionPath;
+var moduleDir = path2.dirname(fileURLToPath(import.meta.url));
+var versionPath = [
+  path2.resolve(moduleDir, "../project-version.json"),
+  path2.resolve(moduleDir, "../../../project-version.json"),
+  path2.resolve("project-version.json")
+].find((candidate) => existsSync2(candidate));
+if (!versionPath) {
+  throw new Error("\u627E\u4E0D\u5230 project-version.json\u3002\u6280\u80FD\u76EE\u5F55\u9700\u8981\u81EA\u5E26\u8BE5\u6587\u4EF6\uFF0C\u4E0D\u80FD\u4F9D\u8D56\u5F53\u524D\u5DE5\u4F5C\u76EE\u5F55\u3002");
+}
 var projectVersion = JSON.parse(readFileSync(versionPath, "utf8"));
 var PROJECT_NAME = projectVersion.projectName;
 var DISPLAY_NAME = projectVersion.displayName;
@@ -12557,6 +12562,11 @@ function buildDecisionBrief(snapshot) {
       kind: "not-collected",
       subject: "greatWorks",
       effect: "\u5DE8\u4F5C\u548C\u5947\u89C2\u69FD\u4F4D\u672A\u91C7\u96C6\uFF0C\u4E0D\u80FD\u5199\u6210 0 \u4EF6\u6216\u7A7A\u69FD\u3002"
+    },
+    {
+      kind: "partial",
+      subject: "diplomacy",
+      effect: "\u6218\u4E89\u548C\u516C\u5F00\u5173\u7CFB\u53EA\u8986\u76D6\u5DF2\u9047\u89C1\u7684\u4E3B\u8981\u6587\u660E\uFF0C\u4E0D\u542B\u57CE\u90A6\u3001\u86EE\u65CF\u548C\u672A\u9047\u89C1\u6587\u660E\u3002"
     }
   ];
   const equipped = arrayOf(snapshot.government?.policies).map((policy) => ({
@@ -12585,8 +12595,8 @@ function buildDecisionBrief(snapshot) {
       },
       cities: cities.map(cityRow),
       units: {
-        own: ownUnits.map((unit) => unitRow(unit, true)),
-        visible: visibleUnits.map((unit) => unitRow(unit, false))
+        own: ownUnits.map((unit) => unitRow(snapshot, unit, true)),
+        visible: visibleUnits.map((unit) => unitRow(snapshot, unit, false))
       },
       research: {
         tech: progressionRow(snapshot.techs),
@@ -12616,8 +12626,8 @@ function buildDecisionBrief(snapshot) {
       },
       limits: [
         "\u7F3A\u53E3\u91CC\u7684\u4E8B\u9879\u4FDD\u6301\u672A\u77E5\uFF0C\u4E0D\u80FD\u8865\u6210 0\u3001\u7A7A\u6216\u5B89\u5168\u3002",
-        "upgradeCost \u53EA\u662F\u8BB0\u5F55\u5230\u7684\u6570\u5B57\uFF0C0 \u4E0D\u662F\u5DF2\u7ECF\u53EF\u4EE5\u514D\u8D39\u5347\u7EA7\u3002",
-        "\u8D44\u6E90\u5E93\u5B58\u4E0D\u80FD\u5355\u72EC\u8BC1\u660E\u67D0\u4E2A\u5355\u4F4D\u6216\u8DEF\u7EBF\u73B0\u5728\u53EF\u5EFA\u9020\u3002",
+        "upgradeCost \u4E3A 0 \u53EA\u662F\u8BB0\u5F55\u503C\uFF1A\u4E0D\u662F\u514D\u8D39\u5347\u7EA7\uFF0C\u4E5F\u4E0D\u662F\u5DF2\u7ECF\u5347\u5230\u6700\u9AD8\u7EA7\u3002\u7F3A\u5C11\u8BE5\u5B57\u6BB5\u8868\u793A\u672A\u8BB0\u5F55\u3002",
+        "resources \u662F\u5E93\u5B58\u6570\u91CF\uFF0C\u4E0D\u662F\u5883\u5185\u5DF2\u6539\u826F\u7684\u8D44\u6E90\u70B9\u6570\u3002",
         "\u5F53\u524D\u751F\u4EA7\u961F\u5217\u548C\u6587\u660E\u7279\u6027\u4E0D\u662F\u73A9\u5BB6\u5DF2\u7ECF\u9009\u5B9A\u7684\u957F\u671F\u8DEF\u7EBF\u3002",
         "\u51E0\u4F55\u8DDD\u79BB\u4E0D\u662F\u5DF2\u7ECF\u9A8C\u8BC1\u7684\u79FB\u52A8\u6216\u653B\u51FB\u8BB8\u53EF\u3002"
       ]
@@ -12667,7 +12677,7 @@ function expandUnit(snapshot, query) {
     detail: {
       kind: "unit",
       coverage: `${index + 1}/${units.length}`,
-      unit: unitRow(found, found.ownerPlayerId === snapshot.localPlayer?.localPlayerId),
+      unit: unitRow(snapshot, found, found.ownerPlayerId === snapshot.localPlayer?.localPlayerId),
       adjacentTiles: adjacent?.adjacentTiles,
       upgradeNote: "upgradeCost \u53EA\u8868\u793A\u8BB0\u5F55\u503C\uFF0C\u4E0D\u8868\u793A\u5DF2\u7ECF\u6EE1\u8DB3\u5347\u7EA7\u76EE\u6807\u3001\u8D44\u6E90\u6216\u91D1\u5E01\u6761\u4EF6\u3002"
     }
@@ -12686,7 +12696,7 @@ function cityRow(city) {
     amenitiesTight: typeof city.amenities === "number" && typeof city.amenitiesNeeded === "number" ? city.amenities < city.amenitiesNeeded : void 0
   };
 }
-function unitRow(unit, own) {
+function unitRow(snapshot, unit, own) {
   const row = {
     id: unit.id,
     name: unit.name ?? unit.type,
@@ -12694,16 +12704,40 @@ function unitRow(unit, own) {
     x: unit.x,
     y: unit.y,
     ownerPlayerId: unit.ownerPlayerId,
-    own
+    owner: describeOwner(unit.ownerPlayerId, snapshot),
+    own,
+    damage: unit.damage,
+    combatStrength: unit.combatStrength,
+    rangedStrength: unit.rangedStrength,
+    combatStrengthMeaning: "combatStrength \u662F\u6EE1\u7F16\u57FA\u7840\u6218\u6597\u529B\u3002damage \u662F\u5DF2\u53D7\u4F24\u5BB3\uFF0C\u4E0D\u80FD\u628A\u53EA\u6709\u57FA\u7840\u6218\u6597\u529B\u5F53\u6210\u6EE1\u8840\u3002"
   };
   if (own) {
     row.movesRemaining = unit.movesRemaining;
+    row.maxMoves = unit.maxMoves;
     row.buildCharges = unit.buildCharges;
-    row.combatStrength = unit.combatStrength;
+    row.level = unit.level;
+    row.experience = unit.experience;
+    row.range = unit.range;
     row.upgradeCost = unit.upgradeCost;
+    row.upgradeCostMeaning = upgradeCostMeaning(unit.upgradeCost);
     row.promotions = unit.promotions;
   }
   return row;
+}
+function describeOwner(playerId, snapshot) {
+  if (snapshot && playerId === snapshot.localPlayer?.localPlayerId) {
+    return { playerId, kind: "own", name: text2(snapshot.localPlayer?.civilizationType) };
+  }
+  const met = arrayOf(snapshot?.diplomacy?.metPlayers).find((player) => player.playerId === playerId);
+  if (met) {
+    return { playerId, kind: "major", name: text2(met.civilizationType) ?? text2(met.leaderType) };
+  }
+  return { playerId, kind: "not-major" };
+}
+function upgradeCostMeaning(value) {
+  if (value === 0) return "\u8BB0\u5F55\u4E3A 0\u3002\u4E0D\u662F\u514D\u8D39\u5347\u7EA7\uFF0C\u4E5F\u4E0D\u662F\u5DF2\u7ECF\u5347\u5230\u6700\u9AD8\u7EA7\u3002";
+  if (typeof value !== "number") return "\u672A\u8BB0\u5F55\u3002";
+  return "\u8BB0\u5F55\u7684\u6570\u5B57\uFF0C\u4E0D\u8868\u793A\u8D44\u6E90\u3001\u79D1\u6280\u6216\u91D1\u5E01\u5DF2\u7ECF\u6EE1\u8DB3\u3002";
 }
 function progressionRow(value) {
   if (!value) return void 0;
@@ -12749,9 +12783,12 @@ function matchNamed(entities, value) {
   if (exactName.length === 1) return exactName[0];
   const contains = entities.filter((entity) => typeof entity.name === "string" && entity.name.includes(value));
   if (contains.length === 1) return contains[0];
-  const names = entities.map((entity) => entity.name).filter((name) => typeof name === "string");
-  if (exactName.length > 1 || contains.length > 1) return { error: `\u300C${value}\u300D\u5BF9\u5E94\u591A\u4E2A\u76EE\u6807\uFF1A${names.join("\u3001")}` };
-  return { error: `\u627E\u4E0D\u5230\u300C${value}\u300D\u3002\u53EF\u9009\uFF1A${names.join("\u3001") || "\u65E0"}` };
+  const matched = exactName.length > 1 ? exactName : contains;
+  if (matched.length > 1) return { error: `\u300C${value}\u300D\u5BF9\u5E94\u591A\u4E2A\u76EE\u6807\uFF1A${matched.map(entityLabel).join("\uFF1B")}` };
+  return { error: `\u627E\u4E0D\u5230\u300C${value}\u300D\u3002\u53EF\u9009\uFF1A${entities.map(entityLabel).join("\uFF1B") || "\u65E0"}` };
+}
+function entityLabel(entity) {
+  return `${entity.name ?? entity.type ?? "\u672A\u547D\u540D"} id=${entity.id ?? "?"} (${entity.x},${entity.y}) owner=${entity.ownerPlayerId ?? "?"}`;
 }
 function pickNumbers(source, keys) {
   const picked = {};
@@ -13004,9 +13041,10 @@ function matchEntity(entities, value) {
   if (exactName.length === 1) return { entity: exactName[0] };
   const contains = entities.filter((entity) => typeof entity.name === "string" && entity.name.includes(value));
   if (contains.length === 1) return { entity: contains[0] };
-  const names = entities.map((entity) => entity.name).filter((name) => typeof name === "string");
-  if (exactName.length > 1 || contains.length > 1) return { error: `\u300C${value}\u300D\u5BF9\u5E94\u591A\u4E2A\u76EE\u6807\uFF1A${names.join("\u3001")}` };
-  return { error: `\u627E\u4E0D\u5230\u300C${value}\u300D\u3002\u53EF\u9009\uFF1A${names.join("\u3001") || "\u65E0"}` };
+  const matched = exactName.length > 1 ? exactName : contains;
+  const label = (entity) => `${entity.name ?? entity.type ?? "\u672A\u547D\u540D"} id=${entity.id ?? "?"} (${entity.x},${entity.y}) owner=${entity.ownerPlayerId ?? "?"}`;
+  if (matched.length > 1) return { error: `\u300C${value}\u300D\u5BF9\u5E94\u591A\u4E2A\u76EE\u6807\uFF1A${matched.map(label).join("\uFF1B")}` };
+  return { error: `\u627E\u4E0D\u5230\u300C${value}\u300D\u3002\u53EF\u9009\uFF1A${entities.map(label).join("\uFF1B") || "\u65E0"}` };
 }
 function placesFor(snapshot, level, tiles, cities, units, focus) {
   const places = {
@@ -13016,7 +13054,7 @@ function placesFor(snapshot, level, tiles, cities, units, focus) {
       x: city.x,
       y: city.y,
       population: city.population,
-      owner: ownerName(snapshot, city.ownerPlayerId)
+      owner: describeOwner(city.ownerPlayerId, snapshot)
     })),
     units: units.map((unit) => ({
       name: unit.name,
@@ -13024,7 +13062,7 @@ function placesFor(snapshot, level, tiles, cities, units, focus) {
       type: readableName(text3(unit.type)),
       x: unit.x,
       y: unit.y,
-      owner: ownerName(snapshot, unit.ownerPlayerId),
+      owner: describeOwner(unit.ownerPlayerId, snapshot),
       own: unit.visibility === "own",
       ...level === "local" && unit.visibility === "own" ? { movesRemaining: unit.movesRemaining, combatStrength: unit.combatStrength, promotions: unit.promotions } : {}
     })),
@@ -13150,12 +13188,6 @@ function boundsOf(coords) {
     minY: Math.min(...coords.map((coord) => coord.y)),
     maxY: Math.max(...coords.map((coord) => coord.y))
   };
-}
-function ownerName(snapshot, playerId) {
-  if (playerId === snapshot.localPlayer?.localPlayerId) return readableName(text3(snapshot.localPlayer?.civilizationType)) ?? "\u5DF1\u65B9";
-  const met = arrayOf2(snapshot.diplomacy?.metPlayers).find((player) => player.playerId === playerId);
-  if (!met) return "\u672A\u77E5\u6587\u660E";
-  return readableName(text3(met.civilizationType)) ?? readableName(text3(met.leaderType)) ?? "\u672A\u77E5\u6587\u660E";
 }
 function terrainColor(terrain, mountain) {
   if (mountain || terrain?.includes("MOUNTAIN") || terrain?.includes("HILL")) return "#b7b7a4";

@@ -1,5 +1,6 @@
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { COMPAT_VERSION, SKILL_NAME, VERSION } from "../../project/src/version.js";
@@ -66,7 +67,8 @@ const requiredFiles = [
   "references/sync-module-guide.md",
   "scripts/suggest-sync.mjs",
   "scripts/context.mjs",
-  "scripts/context-runtime.mjs"
+  "scripts/context-runtime.mjs",
+  "project-version.json"
 ];
 
 const requiredSuggestSyncMarkers = [
@@ -99,6 +101,9 @@ export async function validateSkillSource(sourceDir: string): Promise<SkillPacka
   await validateSkillMarkdown(sourceDir, issues);
   await validateOpenAiMetadata(sourceDir, issues);
   await validateReferenceMarkers(sourceDir, "scripts/suggest-sync.mjs", requiredSuggestSyncMarkers, issues);
+  if (files.includes("scripts/context-runtime.mjs") && files.includes("project-version.json")) {
+    issues.push(...await smokeBundledContext(sourceDir));
+  }
 
   return {
     ok: issues.length === 0,
@@ -415,6 +420,37 @@ async function validateSkillManifestIfPresent(packageDir: string, issues: string
     if (!declaredPaths.has(actual.path)) {
       issues.push(`${SKILL_PACKAGE_MANIFEST_FILE} is missing file entry: ${actual.path}`);
     }
+  }
+}
+
+async function smokeBundledContext(sourceDir: string): Promise<string[]> {
+  const homeDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-runtime-smoke-"));
+  try {
+    const result = spawnSync(process.execPath, [
+      path.join(sourceDir, "scripts", "context.mjs"),
+      "--refresh", "none",
+      "--snapshot-dir", path.join(homeDir, "snapshots"),
+      "--home", homeDir
+    ], {
+      cwd: homeDir,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 20000
+    });
+    if (result.error) return [`打包后的 context 无法启动：${result.error.message}`];
+    const stdout = result.stdout.trim();
+    if (!stdout) return [`打包后的 context 没有输出。stderr=${result.stderr.trim()}`];
+    try {
+      const report = JSON.parse(stdout) as { status?: string };
+      if (report.status !== "ready" && report.status !== "needs-game-refresh" && report.status !== "runtime-error") {
+        return [`打包后的 context 返回了无法识别的状态：${stdout.slice(0, 300)}`];
+      }
+    } catch {
+      return [`打包后的 context 没有返回 JSON。stdout=${stdout.slice(0, 300)} stderr=${result.stderr.trim()}`];
+    }
+    return [];
+  } finally {
+    await rm(homeDir, { recursive: true, force: true });
   }
 }
 

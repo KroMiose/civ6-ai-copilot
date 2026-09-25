@@ -1,4 +1,3 @@
-#!/usr/bin/env tsx
 import { Option, program } from "commander";
 import { runCopilotContext } from "./context.js";
 import type { CopilotRefreshMode } from "./prepare.js";

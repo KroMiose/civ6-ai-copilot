@@ -19,9 +19,15 @@ export interface ProjectVersionInfo {
   logMarkerPrefix: string;
 }
 
-const cwdVersionPath = path.resolve("project-version.json");
-const sourceVersionPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../project-version.json");
-const versionPath = existsSync(cwdVersionPath) ? cwdVersionPath : sourceVersionPath;
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const versionPath = [
+  path.resolve(moduleDir, "../project-version.json"),
+  path.resolve(moduleDir, "../../../project-version.json"),
+  path.resolve("project-version.json")
+].find((candidate) => existsSync(candidate));
+if (!versionPath) {
+  throw new Error("找不到 project-version.json。技能目录需要自带该文件，不能依赖当前工作目录。");
+}
 
 export const projectVersion = JSON.parse(readFileSync(versionPath, "utf8")) as ProjectVersionInfo;
 
