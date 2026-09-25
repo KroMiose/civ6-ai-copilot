@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
+import snapshotSchema from "../../../schemas/snapshot.schema.json" with { type: "json" };
 import { runFairnessChecks, type FairnessIssue } from "./fairness.js";
 import { moduleContractErrors, type ModuleSnapshot } from "./module-cache.js";
 
@@ -12,8 +12,6 @@ export interface SnapshotValidationResult {
   schemaErrors: string[];
   fairnessIssues: FairnessIssue[];
 }
-
-const schemaUrl = new URL("../../../schemas/snapshot.schema.json", import.meta.url);
 
 let cachedValidator: ValidateFunction | undefined;
 const addFormats = addFormatsModule as unknown as (ajv: Ajv2020) => void;
@@ -48,11 +46,9 @@ async function getValidator(): Promise<ValidateFunction> {
     return cachedValidator;
   }
 
-  const schemaPath = fileURLToPath(schemaUrl);
-  const schema = JSON.parse(await readFile(schemaPath, "utf8"));
   const ajv = new Ajv2020({ allErrors: true, strict: true });
   addFormats(ajv);
-  const compiled = ajv.compile(schema);
+  const compiled = ajv.compile(snapshotSchema);
   cachedValidator = compiled;
   return compiled;
 }

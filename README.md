@@ -21,18 +21,18 @@
 把下面这段发给你的本地 Agent，例如 Codex 或 Claude Code：
 
 ```text
-请从 https://github.com/KroMiose/civ6-ai-copilot 安装或更新 civ6-ai-copilot Agent Skill 和本地助手工具。
-优先使用最新 GitHub Release；如果还没有 Release，就从仓库安装 skill/ 和必要的 tooling。
-完成后告诉我 skill 版本、本地工具目录，以及是否需要重启客户端或开启新对话。
+请从 https://github.com/KroMiose/civ6-ai-copilot 安装或更新 civ6-ai-copilot Agent Skill。
+优先使用最新 GitHub Release 里的 skill/civ6-ai-copilot 目录，整份替换现有技能目录。分析程序已经在技能目录内，不要再单独安装或校验一份旧工具。
+完成后告诉我 SKILL.md 里的版本，以及是否需要开启新对话。
 ```
 
 以后更新可以直接复制：
 
 ```text
-请从 https://github.com/KroMiose/civ6-ai-copilot/releases 选择版本最高的发布（包括预发布），更新我的 civ6-ai-copilot Agent Skill 和本地助手工具，校验安装结果，并告诉我实际安装的版本。Mod 与 Skill 的 compatVersion 必须一致；如果 Steam Workshop 的 Mod 还没更新，请提醒我等待下载完成后，在游戏内点击「更新战情」重新生成快照。
+请从 https://github.com/KroMiose/civ6-ai-copilot/releases 选择版本最高的发布（包括预发布），下载其中的 skill/civ6-ai-copilot 目录，整份替换我现有的技能目录。不要用旧的本地工具去校验新技能的版本号。完成后告诉我 SKILL.md 里的版本。Mod 的 compatVersion 仍须是 0.3；如果 Steam Workshop 的 Mod 还没更新，请提醒我在游戏内点击「更新战情」重新生成快照。
 ```
 
-从 `0.1.x` 升级到 `0.3` 协议时，Mod、Skill 和本地工具必须一起更新；旧快照不能与 0.3 协议混用。`0.3.4` 只更新 Agent Skill 和本地工具，游戏内 `0.3.1` Mod 可以继续使用。
+从 `0.1.x` 升级到 `0.3` 协议时，Mod、Skill 和本地工具必须一起更新；旧快照不能与 0.3 协议混用。`0.3.5` 起只替换技能目录。分析程序在技能目录内。游戏内 `0.3.1` Mod 可以继续使用。
 
 ## 第一次使用
 
@@ -88,4 +88,4 @@ Agent 会说明缺少哪类情报以及它影响的判断。需要更新时，�
 
 - [开发者与维护者文档索引](docs/README.md)
 
-当前预发布版本：`0.3.4`。
+当前预发布版本：`0.3.5`。

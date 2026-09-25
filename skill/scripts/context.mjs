@@ -13,6 +13,15 @@ const passthrough = process.argv.slice(2).filter((_, index, args) => {
   return args[index] !== "--query" && args[index] !== "--question";
 });
 
+const bundledRuntime = path.join(scriptDir, "context-runtime.mjs");
+if (existsSync(bundledRuntime)) {
+  const bundled = spawnSync(process.execPath, [bundledRuntime, ...process.argv.slice(2)], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  forward(bundled);
+}
+
 const runtime = await readRuntimeConfig();
 const args = ["run", "--silent", "context", "--", ...(query ? ["--query", query] : []), ...passthrough];
 

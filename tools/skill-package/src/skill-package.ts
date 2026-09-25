@@ -65,7 +65,8 @@ const requiredFiles = [
   "references/snapshot-schema.md",
   "references/sync-module-guide.md",
   "scripts/suggest-sync.mjs",
-  "scripts/context.mjs"
+  "scripts/context.mjs",
+  "scripts/context-runtime.mjs"
 ];
 
 const requiredSuggestSyncMarkers = [

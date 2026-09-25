@@ -47,6 +47,7 @@
 | D-022 | Agent Runtime Contract | 日常 Agent 分析改为一次调用 `context`：Runtime 完成路径发现、平台取数、唯一当前 snapshot 选择、manifest/schema/fairness 校验，并返回带 `exportId/sessionId/gameTurn` 身份的 JSON contract。Agent 不应在正常路径研究源码、搜索 tooling、手工挑选历史 snapshot 或拼接 handoff。 |
 | D-023 | Agent 组装查询（所有者已确认） | Agent 用结构化参数取图或展开实体。`--query` 不参与选择。`unavailable` 写入 gaps，不阻断 `ready`。导出时间不作为拒绝条件。游戏刚刚写完的导出整份成为当前战情，回合变小同样覆盖。`needs-game-refresh` 只表示还没有写完的导出。 |
 | D-024 | 决策简报（所有者已确认） | 不传参数的 `context` 只返回决策简报，不内联原始模块或整张地块表。空间问题用 `--map`，单座城市或单个单位用 `--city` / `--unit`。`--raw` 只把原始导出写到文件并返回路径。缺口区分未采集、不可用、不适用、截断和部分展开；未知不能写成 0、空或安全。 |
+| D-025 | 技能自带运行时（所有者已确认） | 日常分析程序随 Skill 目录分发，入口是 `scripts/context.mjs` 调用同目录的 `context-runtime.mjs`。更新时只替换技能目录。不再要求另装一份版本号必须相同的 tooling 才能分析。 |
 
 影响这些决策的变更需要先更新本表或新增 ADR，再进入实现。
 
@@ -130,7 +131,7 @@ flowchart LR
 
 ```json
 {
-  "version": "0.3.4",
+  "version": "0.3.5",
   "compatVersion": "0.3",
   "protocolVersion": "0.3.0",
   "schemaVersion": "0.3.0"

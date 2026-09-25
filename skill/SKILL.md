@@ -1,7 +1,7 @@
 ---
 name: civ6-ai-copilot
 description: 读取 Civilization VI civ6-ai-copilot Mod 最后一次成功汇总的本地玩家可见战情。按清单选择模块，为发展、城市、科技、市政、政策、军事、海军、定居和多人公平问题提供建议。
-version: 0.3.4
+version: 0.3.5
 compatVersion: "0.3"
 ---
 
@@ -65,6 +65,6 @@ node scripts/context.mjs --map local:coord:12,18:9 --map world
 
 ## 安装
 
-安装或更新时读取 `references/mod-usage-guide.md`。安装器写入本机 `runtime.json`。若返回未注册，请用户从项目 checkout 或 release tooling 重新运行 Skill 安装。
+更新时只替换整个技能目录。分析程序在 `scripts/context-runtime.mjs`，和 `SKILL.md` 是同一份版本。不要再用另一个旧工具目录里的校验器核对版本。安装细节见 `references/mod-usage-guide.md`。
 
 `npm run copilot`、handoff 和 doctor 只用于排障和跨机流程，不是日常步骤。

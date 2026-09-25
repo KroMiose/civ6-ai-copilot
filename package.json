@@ -1,6 +1,6 @@
 {
   "name": "civ6-ai-copilot",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "description": "Civilization VI player-visible information bridge, desktop tools, and AI copilot skill.",
   "type": "module",
@@ -30,6 +30,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "build:skill-runtime": "tsx tools/skill-package/src/build-runtime.ts",
     "bridge": "tsx tools/bridge/src/cli.ts",
     "copilot": "tsx tools/copilot/src/prepare-cli.ts",
     "context": "tsx tools/copilot/src/context-cli.ts",
@@ -51,7 +52,7 @@
     "skill:install": "tsx tools/skill-package/src/skill-package-cli.ts install",
     "render-map": "tsx tools/render-map/src/render-map-cli.ts",
     "skill:package": "tsx tools/skill-package/src/skill-package-cli.ts package",
-    "skill:validate": "tsx tools/skill-package/src/skill-package-cli.ts validate",
+    "skill:validate": "tsx tools/skill-package/src/build-runtime.ts && tsx tools/skill-package/src/skill-package-cli.ts validate",
     "skill:validate-installed": "tsx tools/skill-package/src/skill-package-cli.ts validate-installed",
     "smoke:offline": "tsx tools/smoke/src/offline-smoke-cli.ts",
     "summarize": "tsx tools/copilot/src/summarize-snapshot-cli.ts",
@@ -70,6 +71,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.19.9",
+    "esbuild": "^0.28.2",
     "fengari-node-cli": "^0.1.0",
     "tsx": "^4.19.2",
     "typescript": "^5.5.4"
