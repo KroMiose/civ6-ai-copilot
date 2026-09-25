@@ -214,7 +214,7 @@ export async function runOfflineSmoke(options: OfflineSmokeOptions): Promise<Off
     details: {
       status: context.status,
       identity: context.identity,
-      checks: context.preflight?.checks
+      checks: context.diagnostics?.checks
     }
   });
   if (context.status !== "ready") {
