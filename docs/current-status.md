@@ -22,6 +22,7 @@
 - 默认关闭的「每回合自动更新」；开启后每个本地玩家回合刷新全部已实现模块，包含预算限制的可见地图。
 - `Lua.log` marker bridge 与 macOS/Aspyr `tuner-bridge` 读取缓存通道。
 - Snapshot schema、fairness 校验、doctor、preflight、summary、visible map render、handoff。
+- 单次调用的 Agent context Runtime：自动完成取数、预检、意图推断、当前导出身份确认和问题相关上下文投影；旧 handoff 链保留兼容。
 - Agent Skill 安装、校验、打包和 Mod-first 情报更新引导。
 - Mod package、skill package、release bundle、manual evidence 和 RC gate。
 
@@ -46,7 +47,7 @@ npm run rc:check -- --format markdown
 npm run smoke:offline -- --output-dir /tmp/civ6-ai-copilot-offline-smoke --clean
 ```
 
-该闭环使用示例 fixture 跑通 fake `Lua.log -> bridge -> doctor -> preflight -> summarize -> render-map -> handoff`，用于在真实游戏测试前确认本机工具链和协议实现。
+该闭环使用示例 fixture 跑通 fake `Lua.log -> bridge -> doctor -> preflight -> summarize -> render-map -> handoff`；Agent 日常入口另由 `npm run context -- --query "<question>"` 覆盖，用于在真实游戏测试前确认本机工具链和协议实现。
 
 实机路径支持：
 
@@ -101,5 +102,5 @@ npm run rc:check -- --manual-evidence "<manual-evidence.json>" --format markdown
 
 - 快照字段、UI 模块名、skill 情报更新提示和 schema 必须同步演进。
 - `a.b.c` 版本规则中，`a.b` 必须兼容；patch 变化允许继续分析但可提示更新。
-- 地图、战争、海军、定居问题优先使用 `visible-map.svg`，但它只代表本地玩家可见/已揭示范围。
+- Agent 日常分析优先使用 context Runtime 返回的 `context.visibleMap`；`visible-map.svg` 主要用于人工核对和兼容 handoff，且只代表本地玩家可见/已揭示范围。
 - 公开 issue 或 release note 只需要版本、命令、错误摘要和可复现步骤；本地采集材料留在测试环境。
