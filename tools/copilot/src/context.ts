@@ -32,7 +32,11 @@ export interface CopilotContextReport {
     schemaVersion?: string;
   };
   refresh: CopilotRefreshReport;
-  preflight?: CopilotPreflightReport;
+  preflight?: {
+    checks: CopilotPreflightReport["checks"];
+    issues: string[];
+    warnings: string[];
+  };
   summary?: SnapshotSummary;
   context?: Record<string, unknown>;
   canonical: {
@@ -112,7 +116,7 @@ export async function runCopilotContext(options: CopilotContextOptions = {}): Pr
       generatedAt: new Date().toISOString(),
       query: options.question,
       refresh,
-      preflight,
+      preflight: compactPreflight(preflight),
       summary: preflight.summary,
       canonical: {
         snapshotDir: paths.snapshotDir,
@@ -145,7 +149,7 @@ export async function runCopilotContext(options: CopilotContextOptions = {}): Pr
       schemaVersion: text(snapshot.schemaVersion)
     },
     refresh,
-    preflight,
+    preflight: compactPreflight(preflight),
     summary: preflight.summary,
     context,
     canonical: {
@@ -210,4 +214,12 @@ function text(value: unknown): string | undefined {
 
 function integer(value: unknown): number | undefined {
   return Number.isInteger(value) ? Number(value) : undefined;
+}
+
+function compactPreflight(preflight: CopilotPreflightReport): CopilotContextReport["preflight"] {
+  return {
+    checks: preflight.checks,
+    issues: preflight.issues,
+    warnings: preflight.warnings
+  };
 }
