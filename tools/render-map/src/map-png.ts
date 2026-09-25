@@ -7,6 +7,7 @@ export interface PngHex {
   stroke?: string;
   missing?: boolean;
   mark?: "city" | "own-unit" | "foreign-unit" | "strategic" | "luxury";
+  marker?: number;
 }
 
 export function renderHexPng(options: {
@@ -42,6 +43,7 @@ export function renderHexPng(options: {
     if (hex.mark === "foreign-unit") fillCircle(rgb, width, height, cx + radius * 0.35, cy - radius * 0.28, Math.max(2.5, radius * 0.22), parseColor("#d64545"));
     if (hex.mark === "strategic") fillCircle(rgb, width, height, cx, cy, Math.max(2, radius * 0.16), parseColor("#f2c14e"));
     if (hex.mark === "luxury") fillCircle(rgb, width, height, cx, cy, Math.max(2, radius * 0.16), parseColor("#9b51e0"));
+    if (typeof hex.marker === "number") drawDigits(rgb, width, height, cx, cy, hex.marker);
   }
   return encodePng(width, height, rgb);
 }
@@ -95,6 +97,50 @@ function pointInPolygon(x: number, y: number, points: Array<[number, number]>): 
     if (intersect) inside = !inside;
   }
   return inside;
+}
+
+const DIGITS = [
+  ["111", "101", "101", "101", "111"],
+  ["010", "110", "010", "010", "111"],
+  ["111", "001", "111", "100", "111"],
+  ["111", "001", "111", "001", "111"],
+  ["101", "101", "111", "001", "001"],
+  ["111", "100", "111", "001", "111"],
+  ["111", "100", "111", "101", "111"],
+  ["111", "001", "001", "001", "001"],
+  ["111", "101", "111", "101", "111"],
+  ["111", "101", "111", "001", "111"]
+];
+
+function drawDigits(rgb: Uint8Array, width: number, height: number, cx: number, cy: number, value: number): void {
+  const text = String(Math.max(0, Math.floor(value))).slice(0, 2);
+  const scale = 2;
+  const glyphWidth = 3 * scale;
+  const total = text.length * (glyphWidth + scale);
+  let originX = Math.round(cx - total / 2);
+  const originY = Math.round(cy - (5 * scale) / 2);
+  for (const character of text) {
+    const rows = DIGITS[Number(character)] ?? DIGITS[0]!;
+    rows.forEach((row, rowIndex) => {
+      [...row].forEach((pixel, column) => {
+        if (pixel !== "1") return;
+        for (let dy = 0; dy < scale; dy += 1) {
+          for (let dx = 0; dx < scale; dx += 1) {
+            paint(rgb, width, height, originX + column * scale + dx, originY + rowIndex * scale + dy, [16, 24, 40]);
+          }
+        }
+      });
+    });
+    originX += glyphWidth + scale;
+  }
+}
+
+function paint(rgb: Uint8Array, width: number, height: number, x: number, y: number, color: [number, number, number]): void {
+  if (x < 0 || y < 0 || x >= width || y >= height) return;
+  const offset = (y * width + x) * 3;
+  rgb[offset] = color[0];
+  rgb[offset + 1] = color[1];
+  rgb[offset + 2] = color[2];
 }
 
 function parseColor(value: string): [number, number, number] {

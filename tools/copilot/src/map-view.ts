@@ -95,7 +95,11 @@ export async function buildMapViews(
     const cities = entitiesIn(arrayOf(snapshot.cities), disk);
     const units = entitiesIn(arrayOf(snapshot.units), disk);
     const rings = disk && parsed.level !== "world" ? settleRings(snapshot, disk, parsed.level, focus && "x" in focus ? focus : undefined) : [];
-    const bounds = disk ? boundsOf(disk) : exportedBounds(snapshot) ?? boundsOf(tiles.flatMap((tile) => Number.isInteger(tile.x) && Number.isInteger(tile.y) ? [{ x: tile.x as number, y: tile.y as number }] : []));
+    const worldIndex = parsed.level === "world" ? worldIndexOf(snapshot) : { cities: [], resources: [] };
+    const bounds = disk ? boundsOf(disk) : unionBounds(
+      exportedBounds(snapshot) ?? boundsOf(tiles.flatMap((tile) => Number.isInteger(tile.x) && Number.isInteger(tile.y) ? [{ x: tile.x as number, y: tile.y as number }] : [])),
+      [...worldIndex.cities, ...worldIndex.resources]
+    );
     const stem = path.join(outputDir, `${parsed.level}-${index + 1}`);
     const pngPath = `${stem}.png`;
     const svgPath = `${stem}.svg`;
@@ -110,7 +114,7 @@ export async function buildMapViews(
     await writeFile(pngPath, renderHexPng({
       bounds,
       tileSize: parsed.level === "world" ? 18 : parsed.level === "region" ? 28 : 42,
-      hexes: pngHexes(tiles, cities, units, disk ?? [], rings)
+      hexes: pngHexes(tiles, cities, units, disk ?? [], rings, worldIndex)
     }));
     const missingTiles = disk ? disk.length - tiles.length : 0;
     views.push({
@@ -118,7 +122,7 @@ export async function buildMapViews(
       radius,
       focus: focus && "x" in focus ? focus : undefined,
       image: { path: pngPath, svgPath, tiles: tiles.length, missingTiles },
-      places: placesFor(snapshot, parsed.level, tiles, cities, units, focus && "x" in focus ? focus : undefined)
+      places: placesFor(snapshot, parsed.level, tiles, cities, units, focus && "x" in focus ? focus : undefined, worldIndex)
     });
   }
   return { views, gaps };
@@ -171,10 +175,13 @@ function placesFor(
   tiles: Array<Record<string, any>>,
   cities: Array<Record<string, any>>,
   units: Array<Record<string, any>>,
-  focus?: ResolvedFocus
+  focus?: ResolvedFocus,
+  worldIndex: { cities: Array<Record<string, any>>; resources: Array<Record<string, any>> } = { cities: [], resources: [] }
 ): Record<string, unknown> {
+  const indexedCities = level === "world" && worldIndex.cities.length > 0 ? worldIndex.cities : cities;
   const places: Record<string, unknown> = {
-    cities: cities.map((city) => ({
+    cities: indexedCities.map((city, index) => ({
+      marker: index + 1,
       name: city.name,
       id: city.id,
       x: city.x,
@@ -192,7 +199,8 @@ function placesFor(
       own: unit.visibility === "own",
       ...(level === "local" && unit.visibility === "own" ? { movesRemaining: unit.movesRemaining, combatStrength: unit.combatStrength, promotions: unit.promotions } : {})
     })),
-    resources: tiles.filter((tile) => resourceClass(text(tile.resourceType)) && (level !== "world" || resourceClass(text(tile.resourceType)) !== "bonus")).map((tile) => ({
+    resources: (level === "world" && worldIndex.resources.length > 0 ? worldIndex.resources : tiles.filter((tile) => resourceClass(text(tile.resourceType)) && (level !== "world" || resourceClass(text(tile.resourceType)) !== "bonus"))).map((tile, index) => ({
+      marker: index + 1,
       name: readableName(text(tile.resourceType)),
       class: resourceClass(text(tile.resourceType)),
       x: tile.x,
@@ -253,13 +261,24 @@ function pngHexes(
   cities: Array<Record<string, any>>,
   units: Array<Record<string, any>>,
   disk: Array<{ x: number; y: number }>,
-  rings: Array<{ x: number; y: number; kind: string }>
-): Array<{ x: number; y: number; fill: string; stroke?: string; missing?: boolean; mark?: "city" | "own-unit" | "foreign-unit" | "strategic" | "luxury" }> {
+  rings: Array<{ x: number; y: number; kind: string }>,
+  worldIndex: { cities: Array<Record<string, any>>; resources: Array<Record<string, any>> } = { cities: [], resources: [] }
+): Array<{ x: number; y: number; fill: string; stroke?: string; missing?: boolean; mark?: "city" | "own-unit" | "foreign-unit" | "strategic" | "luxury"; marker?: number }> {
   const tileByKey = new Map(tiles.map((tile) => [`${tile.x},${tile.y}`, tile]));
-  const cityKeys = new Set(cities.map((city) => `${city.x},${city.y}`));
+  const cityKeys = new Set([...cities, ...worldIndex.cities].map((city) => `${city.x},${city.y}`));
+  const cityMarkers = new Map(worldIndex.cities.map((city, index) => [`${city.x},${city.y}`, index + 1]));
+  const resourceMarkers = new Map(worldIndex.resources.map((resource, index) => [`${resource.x},${resource.y}`, index + 1]));
   const unitByKey = new Map(units.map((unit) => [`${unit.x},${unit.y}`, unit]));
   const ringByKey = new Map(rings.map((ring) => [`${ring.x},${ring.y}`, ring.kind]));
   const coords = disk.length > 0 ? disk : tiles.map((tile) => ({ x: numberOf(tile.x), y: numberOf(tile.y) }));
+  const seen = new Set(coords.map((coord) => `${coord.x},${coord.y}`));
+  for (const marker of [...worldIndex.cities, ...worldIndex.resources]) {
+    const key = `${marker.x},${marker.y}`;
+    if (!seen.has(key) && Number.isInteger(marker.x) && Number.isInteger(marker.y)) {
+      coords.push({ x: marker.x, y: marker.y });
+      seen.add(key);
+    }
+  }
   return coords.map((coord) => {
     const tile = tileByKey.get(`${coord.x},${coord.y}`);
     const unit = unitByKey.get(`${coord.x},${coord.y}`);
@@ -276,9 +295,30 @@ function pngHexes(
         : unit ? "foreign-unit"
         : resource === "strategic" ? "strategic"
         : resource === "luxury" ? "luxury"
-        : undefined
+        : undefined,
+      marker: cityMarkers.get(`${coord.x},${coord.y}`) ?? resourceMarkers.get(`${coord.x},${coord.y}`)
     };
   });
+}
+
+function worldIndexOf(snapshot: Record<string, any>): { cities: Array<Record<string, any>>; resources: Array<Record<string, any>> } {
+  return {
+    cities: arrayOf(snapshot.visibleMap?.worldIndex?.cities),
+    resources: arrayOf(snapshot.visibleMap?.worldIndex?.resources).filter((resource) => resourceClass(text(resource.resourceType)) !== "bonus")
+  };
+}
+
+function unionBounds(
+  base: { minX: number; maxX: number; minY: number; maxY: number },
+  extra: Array<Record<string, any>>
+): { minX: number; maxX: number; minY: number; maxY: number } {
+  const coords = extra.flatMap((item) => Number.isInteger(item.x) && Number.isInteger(item.y) ? [{ x: item.x as number, y: item.y as number }] : []);
+  if (coords.length === 0) return base;
+  return boundsOf([
+    { x: base.minX, y: base.minY },
+    { x: base.maxX, y: base.maxY },
+    ...coords
+  ]);
 }
 
 function settleRings(snapshot: Record<string, any>, disk: Array<{ x: number; y: number }>, level: MapLevel, focus?: ResolvedFocus): Array<{ x: number; y: number; kind: "blocked" | "settle" | "workable" }> {

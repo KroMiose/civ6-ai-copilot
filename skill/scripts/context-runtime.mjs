@@ -11244,6 +11244,7 @@ var snapshot_schema_default = {
         ruleset: { type: "string" },
         gameSpeed: { type: "string" },
         mapSize: { type: "string" },
+        humanPlayerCount: { type: "integer", minimum: 0 },
         isMultiplayer: { type: "boolean" },
         idScope: { type: "string", enum: ["load"] }
       }
@@ -11278,6 +11279,40 @@ var snapshot_schema_default = {
         truncated: { type: "boolean" },
         tileLimit: { type: "integer", minimum: 1 },
         revealedTileCount: { type: "integer", minimum: 0 },
+        worldIndex: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            truncated: { type: "boolean" },
+            cities: {
+              type: "array",
+              items: {
+                type: "object",
+                required: ["x", "y"],
+                additionalProperties: false,
+                properties: {
+                  x: { type: "integer" },
+                  y: { type: "integer" },
+                  ownerPlayerId: { type: "integer" },
+                  name: { type: "string" }
+                }
+              }
+            },
+            resources: {
+              type: "array",
+              items: {
+                type: "object",
+                required: ["x", "y", "resourceType"],
+                additionalProperties: false,
+                properties: {
+                  x: { type: "integer" },
+                  y: { type: "integer" },
+                  resourceType: { type: "string" }
+                }
+              }
+            }
+          }
+        },
         bounds: {
           type: "object",
           additionalProperties: false,
@@ -11526,6 +11561,9 @@ var snapshot_schema_default = {
         type: { type: "string" },
         name: { type: "string" },
         ownerPlayerId: { type: "integer" },
+        originalOwnerPlayerId: { type: "integer", minimum: 0 },
+        isLevied: { type: "boolean" },
+        levyTurnsRemaining: { type: "integer", minimum: 0 },
         x: { type: "integer" },
         y: { type: "integer" },
         damage: { type: "integer", minimum: 0 },
@@ -11753,6 +11791,7 @@ var snapshot_schema_default = {
               name: { type: "string" },
               envoys: { type: "integer", minimum: 0 },
               isSuzerain: { type: "boolean" },
+              suzerainPlayerId: { type: "integer", minimum: 0 },
               rewards: {
                 type: "object",
                 additionalProperties: false,
@@ -12138,7 +12177,7 @@ function renderTile(tile, bounds, layout, padding, headerHeight, level) {
 function renderTileLabel(tile, cityById, bounds, layout, padding, headerHeight, level) {
   const { cx, cy } = hexCenter(tile, bounds, layout, padding, headerHeight);
   const city = tile.cityId ? cityById.get(tile.cityId) : void 0;
-  const resource = level === "local" ? readableName(tile.resourceType) : shortResource(tile.resourceType);
+  const resource = readableName(tile.resourceType);
   const label = level === "local" ? resource : city?.name ?? resource;
   const yieldLine = level === "local" ? formatYields(tile.yields) : "";
   const resourceAttr = tile.resourceType ? ` data-resource-type="${escapeXml(tile.resourceType)}"` : "";
@@ -12353,54 +12392,6 @@ function tileTitleText(tile, city) {
 function round(value) {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
-function shortResource(resourceType) {
-  if (!resourceType || resourceType === "UNKNOWN_RESOURCE" || resourceType === "-1") {
-    return void 0;
-  }
-  const normalized = resourceType.replace(/^RESOURCE_/, "");
-  const knownCodes = {
-    ALUMINUM: "ALU",
-    AMBER: "AMB",
-    BANANAS: "BAN",
-    CATTLE: "CAT",
-    CITRUS: "CIT",
-    COAL: "COA",
-    COPPER: "COP",
-    CRABS: "CRA",
-    DEER: "DEE",
-    DIAMONDS: "DIA",
-    FISH: "FIS",
-    FURS: "FUR",
-    GYPSUM: "GYP",
-    HORSES: "HOR",
-    IRON: "IRO",
-    IVORY: "IVO",
-    JADE: "JAD",
-    MARBLE: "MAR",
-    MERCURY: "MER",
-    NITER: "NIT",
-    OIL: "OIL",
-    PEARLS: "PEA",
-    RICE: "RIC",
-    SALT: "SAL",
-    SHEEP: "SHE",
-    SILK: "SIL",
-    SILVER: "SLV",
-    STONE: "STO",
-    TEA: "TEA",
-    TOBACCO: "TOB",
-    TRUFFLES: "TRU",
-    TURTLES: "TUR",
-    URANIUM: "URA",
-    WHEAT: "WHE",
-    WHALES: "WHA",
-    WINE: "WIN"
-  };
-  if (knownCodes[normalized]) {
-    return knownCodes[normalized];
-  }
-  return normalized.split("_").map((part) => part.slice(0, 3)).join("/").slice(0, 7);
-}
 function shortUnit(unitType) {
   const normalized = unitType?.replace(/^UNIT_/, "") ?? "";
   const knownCodes = {
@@ -12558,6 +12549,7 @@ function buildDecisionBrief(snapshot) {
   const gaps = [
     ...domainGaps(snapshot),
     ...mapGaps(snapshot),
+    ...sessionGaps(snapshot.session),
     {
       kind: "not-collected",
       subject: "greatWorks",
@@ -12618,8 +12610,11 @@ function buildDecisionBrief(snapshot) {
       map: {
         exportedTiles: arrayOf(snapshot.visibleMap?.tiles).length,
         truncated: snapshot.visibleMap?.truncated === true,
-        tileLimit: typeof snapshot.visibleMap?.tileLimit === "number" ? snapshot.visibleMap.tileLimit : void 0
+        tileLimit: typeof snapshot.visibleMap?.tileLimit === "number" ? snapshot.visibleMap.tileLimit : void 0,
+        worldCities: arrayOf(snapshot.visibleMap?.worldIndex?.cities).length,
+        worldResources: arrayOf(snapshot.visibleMap?.worldIndex?.resources).length
       },
+      session: sessionRow(snapshot.session),
       selection: {
         city: snapshot.selection?.city?.status === "selected" ? text2(snapshot.selection.city.id) : void 0,
         unit: snapshot.selection?.unit?.status === "selected" ? text2(snapshot.selection.unit.id) : void 0
@@ -12707,6 +12702,9 @@ function unitRow(snapshot, unit, own) {
     owner: describeOwner(unit.ownerPlayerId, snapshot),
     own,
     damage: unit.damage,
+    originalOwner: typeof unit.originalOwnerPlayerId === "number" ? describeOwner(unit.originalOwnerPlayerId, snapshot) : void 0,
+    isLevied: unit.isLevied === true,
+    levyTurnsRemaining: unit.levyTurnsRemaining,
     combatStrength: unit.combatStrength,
     rangedStrength: unit.rangedStrength,
     combatStrengthMeaning: "combatStrength \u662F\u6EE1\u7F16\u57FA\u7840\u6218\u6597\u529B\u3002damage \u662F\u5DF2\u53D7\u4F24\u5BB3\uFF0C\u4E0D\u80FD\u628A\u53EA\u6709\u57FA\u7840\u6218\u6597\u529B\u5F53\u6210\u6EE1\u8840\u3002"
@@ -12762,6 +12760,32 @@ function domainGaps(snapshot) {
     }
     return [];
   });
+}
+function sessionRow(session) {
+  return {
+    gameTurn: session?.gameTurn,
+    ruleset: session?.ruleset,
+    gameSpeed: session?.gameSpeed,
+    mapSize: session?.mapSize,
+    isMultiplayer: session?.isMultiplayer,
+    humanPlayerCount: session?.humanPlayerCount
+  };
+}
+function sessionGaps(session) {
+  const gaps = [];
+  if (!session || looksUnresolved(session.gameSpeed)) {
+    gaps.push({ kind: "not-collected", subject: "gameSpeed", effect: "\u6E38\u620F\u901F\u5EA6\u6CA1\u6709\u53EF\u8BFB\u540D\u79F0\uFF0C\u4E0D\u80FD\u628A\u54C8\u5E0C\u6216 UNKNOWN \u5F53\u6210\u6807\u51C6\u3001\u5FEB\u901F\u6216\u53F2\u8BD7\u3002" });
+  }
+  if (!session || looksUnresolved(session.mapSize)) {
+    gaps.push({ kind: "not-collected", subject: "mapSize", effect: "\u5730\u56FE\u5927\u5C0F\u6CA1\u6709\u53EF\u8BFB\u540D\u79F0\u3002" });
+  }
+  if (typeof session?.humanPlayerCount !== "number") {
+    gaps.push({ kind: "not-collected", subject: "humanPlayerCount", effect: "\u4EBA\u7C7B\u5E2D\u4F4D\u6570\u91CF\u672A\u8BB0\u5F55\u3002" });
+  }
+  return gaps;
+}
+function looksUnresolved(value) {
+  return typeof value !== "string" || value.length === 0 || value.startsWith("UNKNOWN") || /^-?\d+$/.test(value);
 }
 function mapGaps(snapshot) {
   if (snapshot.visibleMap?.truncated === true) {
@@ -12838,6 +12862,7 @@ function renderHexPng(options2) {
     if (hex.mark === "foreign-unit") fillCircle(rgb, width, height, cx + radius * 0.35, cy - radius * 0.28, Math.max(2.5, radius * 0.22), parseColor("#d64545"));
     if (hex.mark === "strategic") fillCircle(rgb, width, height, cx, cy, Math.max(2, radius * 0.16), parseColor("#f2c14e"));
     if (hex.mark === "luxury") fillCircle(rgb, width, height, cx, cy, Math.max(2, radius * 0.16), parseColor("#9b51e0"));
+    if (typeof hex.marker === "number") drawDigits(rgb, width, height, cx, cy, hex.marker);
   }
   return encodePng(width, height, rgb);
 }
@@ -12888,6 +12913,47 @@ function pointInPolygon(x, y, points) {
     if (intersect) inside = !inside;
   }
   return inside;
+}
+var DIGITS = [
+  ["111", "101", "101", "101", "111"],
+  ["010", "110", "010", "010", "111"],
+  ["111", "001", "111", "100", "111"],
+  ["111", "001", "111", "001", "111"],
+  ["101", "101", "111", "001", "001"],
+  ["111", "100", "111", "001", "111"],
+  ["111", "100", "111", "101", "111"],
+  ["111", "001", "001", "001", "001"],
+  ["111", "101", "111", "101", "111"],
+  ["111", "101", "111", "001", "111"]
+];
+function drawDigits(rgb, width, height, cx, cy, value) {
+  const text5 = String(Math.max(0, Math.floor(value))).slice(0, 2);
+  const scale = 2;
+  const glyphWidth = 3 * scale;
+  const total = text5.length * (glyphWidth + scale);
+  let originX = Math.round(cx - total / 2);
+  const originY = Math.round(cy - 5 * scale / 2);
+  for (const character of text5) {
+    const rows = DIGITS[Number(character)] ?? DIGITS[0];
+    rows.forEach((row, rowIndex) => {
+      [...row].forEach((pixel, column) => {
+        if (pixel !== "1") return;
+        for (let dy = 0; dy < scale; dy += 1) {
+          for (let dx = 0; dx < scale; dx += 1) {
+            paint(rgb, width, height, originX + column * scale + dx, originY + rowIndex * scale + dy, [16, 24, 40]);
+          }
+        }
+      });
+    });
+    originX += glyphWidth + scale;
+  }
+}
+function paint(rgb, width, height, x, y, color) {
+  if (x < 0 || y < 0 || x >= width || y >= height) return;
+  const offset = (y * width + x) * 3;
+  rgb[offset] = color[0];
+  rgb[offset + 1] = color[1];
+  rgb[offset + 2] = color[2];
 }
 function parseColor(value) {
   return [Number.parseInt(value.slice(1, 3), 16), Number.parseInt(value.slice(3, 5), 16), Number.parseInt(value.slice(5, 7), 16)];
@@ -12980,7 +13046,11 @@ async function buildMapViews(snapshot, specs, outputDir) {
     const cities = entitiesIn(arrayOf2(snapshot.cities), disk);
     const units = entitiesIn(arrayOf2(snapshot.units), disk);
     const rings = disk && parsed.level !== "world" ? settleRings(snapshot, disk, parsed.level, focus && "x" in focus ? focus : void 0) : [];
-    const bounds = disk ? boundsOf(disk) : exportedBounds(snapshot) ?? boundsOf(tiles.flatMap((tile) => Number.isInteger(tile.x) && Number.isInteger(tile.y) ? [{ x: tile.x, y: tile.y }] : []));
+    const worldIndex = parsed.level === "world" ? worldIndexOf(snapshot) : { cities: [], resources: [] };
+    const bounds = disk ? boundsOf(disk) : unionBounds(
+      exportedBounds(snapshot) ?? boundsOf(tiles.flatMap((tile) => Number.isInteger(tile.x) && Number.isInteger(tile.y) ? [{ x: tile.x, y: tile.y }] : [])),
+      [...worldIndex.cities, ...worldIndex.resources]
+    );
     const stem = path3.join(outputDir, `${parsed.level}-${index + 1}`);
     const pngPath = `${stem}.png`;
     const svgPath = `${stem}.svg`;
@@ -12995,7 +13065,7 @@ async function buildMapViews(snapshot, specs, outputDir) {
     await writeFile2(pngPath, renderHexPng({
       bounds,
       tileSize: parsed.level === "world" ? 18 : parsed.level === "region" ? 28 : 42,
-      hexes: pngHexes(tiles, cities, units, disk ?? [], rings)
+      hexes: pngHexes(tiles, cities, units, disk ?? [], rings, worldIndex)
     }));
     const missingTiles = disk ? disk.length - tiles.length : 0;
     views.push({
@@ -13003,7 +13073,7 @@ async function buildMapViews(snapshot, specs, outputDir) {
       radius,
       focus: focus && "x" in focus ? focus : void 0,
       image: { path: pngPath, svgPath, tiles: tiles.length, missingTiles },
-      places: placesFor(snapshot, parsed.level, tiles, cities, units, focus && "x" in focus ? focus : void 0)
+      places: placesFor(snapshot, parsed.level, tiles, cities, units, focus && "x" in focus ? focus : void 0, worldIndex)
     });
   }
   return { views, gaps };
@@ -13046,9 +13116,11 @@ function matchEntity(entities, value) {
   if (matched.length > 1) return { error: `\u300C${value}\u300D\u5BF9\u5E94\u591A\u4E2A\u76EE\u6807\uFF1A${matched.map(label).join("\uFF1B")}` };
   return { error: `\u627E\u4E0D\u5230\u300C${value}\u300D\u3002\u53EF\u9009\uFF1A${entities.map(label).join("\uFF1B") || "\u65E0"}` };
 }
-function placesFor(snapshot, level, tiles, cities, units, focus) {
+function placesFor(snapshot, level, tiles, cities, units, focus, worldIndex = { cities: [], resources: [] }) {
+  const indexedCities = level === "world" && worldIndex.cities.length > 0 ? worldIndex.cities : cities;
   const places = {
-    cities: cities.map((city) => ({
+    cities: indexedCities.map((city, index) => ({
+      marker: index + 1,
       name: city.name,
       id: city.id,
       x: city.x,
@@ -13066,7 +13138,8 @@ function placesFor(snapshot, level, tiles, cities, units, focus) {
       own: unit.visibility === "own",
       ...level === "local" && unit.visibility === "own" ? { movesRemaining: unit.movesRemaining, combatStrength: unit.combatStrength, promotions: unit.promotions } : {}
     })),
-    resources: tiles.filter((tile) => resourceClass(text3(tile.resourceType)) && (level !== "world" || resourceClass(text3(tile.resourceType)) !== "bonus")).map((tile) => ({
+    resources: (level === "world" && worldIndex.resources.length > 0 ? worldIndex.resources : tiles.filter((tile) => resourceClass(text3(tile.resourceType)) && (level !== "world" || resourceClass(text3(tile.resourceType)) !== "bonus"))).map((tile, index) => ({
+      marker: index + 1,
       name: readableName(text3(tile.resourceType)),
       class: resourceClass(text3(tile.resourceType)),
       x: tile.x,
@@ -13120,12 +13193,22 @@ function compactTile(tile, level) {
   }
   return compact;
 }
-function pngHexes(tiles, cities, units, disk, rings) {
+function pngHexes(tiles, cities, units, disk, rings, worldIndex = { cities: [], resources: [] }) {
   const tileByKey = new Map(tiles.map((tile) => [`${tile.x},${tile.y}`, tile]));
-  const cityKeys = new Set(cities.map((city) => `${city.x},${city.y}`));
+  const cityKeys = new Set([...cities, ...worldIndex.cities].map((city) => `${city.x},${city.y}`));
+  const cityMarkers = new Map(worldIndex.cities.map((city, index) => [`${city.x},${city.y}`, index + 1]));
+  const resourceMarkers = new Map(worldIndex.resources.map((resource, index) => [`${resource.x},${resource.y}`, index + 1]));
   const unitByKey = new Map(units.map((unit) => [`${unit.x},${unit.y}`, unit]));
   const ringByKey = new Map(rings.map((ring) => [`${ring.x},${ring.y}`, ring.kind]));
   const coords = disk.length > 0 ? disk : tiles.map((tile) => ({ x: numberOf(tile.x), y: numberOf(tile.y) }));
+  const seen = new Set(coords.map((coord) => `${coord.x},${coord.y}`));
+  for (const marker of [...worldIndex.cities, ...worldIndex.resources]) {
+    const key = `${marker.x},${marker.y}`;
+    if (!seen.has(key) && Number.isInteger(marker.x) && Number.isInteger(marker.y)) {
+      coords.push({ x: marker.x, y: marker.y });
+      seen.add(key);
+    }
+  }
   return coords.map((coord) => {
     const tile = tileByKey.get(`${coord.x},${coord.y}`);
     const unit = unitByKey.get(`${coord.x},${coord.y}`);
@@ -13137,9 +13220,25 @@ function pngHexes(tiles, cities, units, disk, rings) {
       fill: tile ? terrainColor(text3(tile.terrainType), tile.isMountain === true) : "#d9d9d9",
       stroke: ring === "settle" ? "#2f9e44" : ring === "blocked" ? "#e8590c" : typeof tile?.ownerPlayerId === "number" ? ownerColor(tile.ownerPlayerId) : void 0,
       missing: !tile,
-      mark: cityKeys.has(`${coord.x},${coord.y}`) ? "city" : unit?.visibility === "own" ? "own-unit" : unit ? "foreign-unit" : resource === "strategic" ? "strategic" : resource === "luxury" ? "luxury" : void 0
+      mark: cityKeys.has(`${coord.x},${coord.y}`) ? "city" : unit?.visibility === "own" ? "own-unit" : unit ? "foreign-unit" : resource === "strategic" ? "strategic" : resource === "luxury" ? "luxury" : void 0,
+      marker: cityMarkers.get(`${coord.x},${coord.y}`) ?? resourceMarkers.get(`${coord.x},${coord.y}`)
     };
   });
+}
+function worldIndexOf(snapshot) {
+  return {
+    cities: arrayOf2(snapshot.visibleMap?.worldIndex?.cities),
+    resources: arrayOf2(snapshot.visibleMap?.worldIndex?.resources).filter((resource) => resourceClass(text3(resource.resourceType)) !== "bonus")
+  };
+}
+function unionBounds(base, extra) {
+  const coords = extra.flatMap((item) => Number.isInteger(item.x) && Number.isInteger(item.y) ? [{ x: item.x, y: item.y }] : []);
+  if (coords.length === 0) return base;
+  return boundsOf([
+    { x: base.minX, y: base.minY },
+    { x: base.maxX, y: base.maxY },
+    ...coords
+  ]);
 }
 function settleRings(snapshot, disk, level, focus) {
   const cities = arrayOf2(snapshot.cities).filter((city) => Number.isInteger(city.x) && Number.isInteger(city.y));

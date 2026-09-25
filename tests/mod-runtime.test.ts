@@ -283,6 +283,10 @@ for _, field in ipairs({"range", "maxMoves", "buildCharges", "experience", "expe
   assert(foreign[field] == nil, field)
 end
 assert(foreignUnitFieldReads == 0)
+foreignUnit.GetOriginalOwner = function() return 15 end
+local levied = api.unitSnapshotEntry(foreignUnit, 1, "visible-now", "confirmed")
+assert(levied.isLevied == true and levied.originalOwnerPlayerId == 15)
+assert(levied.range == nil and levied.movesRemaining == nil)
 `);
 });
 

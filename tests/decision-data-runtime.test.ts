@@ -100,13 +100,13 @@ assert(cityStates.source == "ui-derived" and cityStates.visibility == "player-vi
 assert(cityStates.availableEnvoys == 0 and arrayTags[cityStates.cityStates] and #cityStates.cityStates == 1)
 local known = cityStates.cityStates[1]
 assert(known.playerId == 5 and known.type == "SCIENTIFIC" and known.envoys == 2)
-assert(known.isSuzerain == false and known.suzerainId == nil)
+assert(known.isSuzerain == false and known.suzerainPlayerId == 99 and known.suzerainId == nil)
 assert(known.rewards.oneEnvoy == "LOC_MINOR_CIV_SCIENTIFIC_TRAIT_SMALL_INFLUENCE_BONUS")
 assert(known.rewards.suzerain:find("LOC_TRAIT_CITY_STATE_TEST_DESCRIPTION", 1, true))
 assert(arrayTags[known.quests] and #known.quests == 1)
 assert(known.quests[1].type == "QUEST_TEST" and known.quests[1].reward == "LOC_QUEST_TEST_REWARD")
 assert(unknownCityStateReads == 0)
-for key in pairs(known) do assert(key ~= "suzerainId" and key ~= "suzerainPlayerId") end
+for key in pairs(known) do assert(key ~= "suzerainId") end
 ${jsonHelpers}
 print("DECISION_DATA " .. jsonEncode({ governors = governors, trade = trade, cityStates = cityStates }))
 `);

@@ -2,7 +2,7 @@
 -- This file must stay read-only with respect to gameplay state. It only reads UI-visible data and exports chunks.
 
 local MOD_ID = "civ6-ai-copilot"
-local MOD_VERSION = "0.3.6"
+local MOD_VERSION = "0.3.7"
 local COMPAT_VERSION = "0.3"
 local SCHEMA_VERSION = "0.3.0"
 local PROTOCOL_VERSION = "0.3.0"
@@ -566,6 +566,62 @@ local function nonNegativeFiniteIntegerOrNil(value)
   return nil
 end
 
+local BONUS_RESOURCES = {
+  RESOURCE_BANANAS = true,
+  RESOURCE_CATTLE = true,
+  RESOURCE_COPPER = true,
+  RESOURCE_CRABS = true,
+  RESOURCE_DEER = true,
+  RESOURCE_FISH = true,
+  RESOURCE_MAIZE = true,
+  RESOURCE_RICE = true,
+  RESOURCE_SHEEP = true,
+  RESOURCE_STONE = true,
+  RESOURCE_WHEAT = true
+}
+local WORLD_CITY_LIMIT = 400
+local WORLD_RESOURCE_LIMIT = 800
+
+local function configurationTypeName(tableName, typeField, rawValue, fallback)
+  if type(rawValue) == "string" and rawValue ~= "" and string.match(rawValue, "^%-?%d+$") == nil and string.find(rawValue, "UNKNOWN", 1, true) == nil then
+    return rawValue
+  end
+  local key = type(rawValue) == "number" and rawValue or tonumber(rawValue)
+  local row = gameInfoRowByHash(tableName, key, typeField)
+  if row and type(row[typeField]) == "string" and row[typeField] ~= "" then
+    return row[typeField]
+  end
+  if type(rawValue) == "string" and rawValue ~= "" then
+    return rawValue
+  end
+  return fallback
+end
+
+local function countHumanPlayers()
+  local ids = safeCall(function()
+    return PlayerManager.GetAliveMajorIDs()
+  end, nil)
+  if type(ids) ~= "table" then
+    return nil
+  end
+  local count = 0
+  local saw = false
+  for _, id in ipairs(ids) do
+    saw = true
+    local isHuman = safeCall(function()
+      local player = Players and Players[id]
+      return player and player:IsHuman()
+    end, nil)
+    if isHuman == true then
+      count = count + 1
+    end
+  end
+  if not saw then
+    return nil
+  end
+  return count
+end
+
 local function getLocalPlayerId()
   local id = safeCall(function()
     return Game.GetLocalPlayer()
@@ -602,6 +658,27 @@ local function unitSnapshotEntry(unit, ownerPlayerId, visibilityKind, confidence
       return unit:GetDamage()
     end, nil)
   }
+  local originalOwnerPlayerId = safeCall(function()
+    return unit:GetOriginalOwner()
+  end, nil)
+  if type(originalOwnerPlayerId) == "number" and originalOwnerPlayerId >= 0 and originalOwnerPlayerId ~= ownerPlayerId then
+    entry.originalOwnerPlayerId = originalOwnerPlayerId
+    entry.isLevied = true
+    local levyTurns = safeCall(function()
+      local owner = Players and Players[originalOwnerPlayerId]
+      local influence = owner and owner:GetInfluence()
+      if influence and influence.GetLevyTurnsRemaining then
+        return influence:GetLevyTurnsRemaining()
+      end
+      if influence and influence.GetLevyTurnCounter then
+        return influence:GetLevyTurnCounter()
+      end
+      return nil
+    end, nil)
+    if type(levyTurns) == "number" and levyTurns >= 0 then
+      entry.levyTurnsRemaining = levyTurns
+    end
+  end
   if ownerPlayerId == getLocalPlayerId() then
     local movesRemaining = safeCall(function()
       return unit:GetMovesRemaining()
@@ -1307,7 +1384,10 @@ local function createVisibleMapCollector(localPlayerId)
     phase = "scan",
     done = false,
     foreignUnitVisibilityUnverified = false,
-    localPlayerId = localPlayerId
+    localPlayerId = localPlayerId,
+    worldCities = jsonArray({}),
+    worldResources = jsonArray({}),
+    worldIndexTruncated = false
   }
 
   collector.visibility = safeCall(function()
@@ -1354,7 +1434,12 @@ local function createVisibleMapCollector(localPlayerId)
       tileLimit = VISIBLE_MAP_TILE_LIMIT,
       revealedTileCount = self.revealedTileCount,
       bounds = self.bounds,
-      tiles = self.tiles
+      tiles = self.tiles,
+      worldIndex = {
+        cities = self.worldCities,
+        resources = self.worldResources,
+        truncated = self.worldIndexTruncated
+      }
     }, self.visibleForeignUnits, self.foreignUnitVisibilityUnverified
   end
 
@@ -1368,6 +1453,38 @@ local function createVisibleMapCollector(localPlayerId)
 
   function collector:nearOwnEntity(x, y)
     return self.nearKeys[tostring(x) .. "," .. tostring(y)] == true
+  end
+
+  function collector:noteWorldIndex(plot, x, y)
+    if plot == nil then return end
+    local isCity = safeCall(function() return plot:IsCity() end, false) == true
+    if isCity and #self.worldCities < WORLD_CITY_LIMIT then
+      local marker = { x = x, y = y }
+      local ownerPlayerId = safeCall(function() return plot:GetOwner() end, nil)
+      if type(ownerPlayerId) == "number" and ownerPlayerId >= 0 then
+        marker.ownerPlayerId = ownerPlayerId
+      end
+      local city = safeCall(function()
+        if Cities and Cities.GetCityInPlot then return Cities.GetCityInPlot(x, y) end
+        if plot.GetPlotCity then return plot:GetPlotCity() end
+        return nil
+      end, nil)
+      local name = safeCall(function()
+        return city and Locale.Lookup(city:GetName())
+      end, nil)
+      if type(name) == "string" and name ~= "" then marker.name = name end
+      table.insert(self.worldCities, marker)
+    elseif isCity then
+      self.worldIndexTruncated = true
+    end
+    local resourceType = visiblePlotResourceType(plot, self.playerResources)
+    if type(resourceType) == "string" and BONUS_RESOURCES[resourceType] ~= true then
+      if #self.worldResources < WORLD_RESOURCE_LIMIT then
+        table.insert(self.worldResources, { x = x, y = y, resourceType = resourceType })
+      else
+        self.worldIndexTruncated = true
+      end
+    end
   end
 
   function collector:selectPriorities()
@@ -1391,6 +1508,16 @@ local function createVisibleMapCollector(localPlayerId)
     if hasRoom then hasRoom = addBucket(self.nearbyCoords) end
     if hasRoom then addBucket(self.otherCoords) end
     self.truncated = self.revealedTileCount > #self.selectedCoords
+    local selectedKeys = {}
+    for _, coord in ipairs(self.selectedCoords) do
+      selectedKeys[tostring(coord.x) .. "," .. tostring(coord.y)] = true
+    end
+    for _, coord in ipairs(self.visibleCoords) do
+      if selectedKeys[tostring(coord.x) .. "," .. tostring(coord.y)] ~= true then
+        local plot = safeCall(function() return Map.GetPlot(coord.x, coord.y) end, nil)
+        self:noteWorldIndex(plot, coord.x, coord.y)
+      end
+    end
     self.visibleCoords = nil
     self.nearbyCoords = nil
     self.otherCoords = nil
@@ -1484,6 +1611,7 @@ local function createVisibleMapCollector(localPlayerId)
             end
           end
           enrichTilePlanningFields(tile, plot)
+          self:noteWorldIndex(plot, coord.x, coord.y)
 
           local unitIds, tileForeignUnits, unverified = collectUnitsInVisiblePlot(
             plot, self.localPlayerId, self.seenVisibleForeignUnitIds, self.visibility
@@ -2151,15 +2279,18 @@ local function collectSnapshot(exportType, modules, options)
       ruleset = safeCall(function()
         return tostring(GameConfiguration.GetValue("RULESET") or "UNKNOWN_RULESET")
       end, "UNKNOWN_RULESET"),
-      gameSpeed = safeCall(function()
-        return tostring(GameConfiguration.GetGameSpeedType() or "UNKNOWN_SPEED")
-      end, "UNKNOWN_SPEED"),
-      mapSize = safeCall(function()
-        return tostring(GameConfiguration.GetMapSize() or "UNKNOWN_MAPSIZE")
-      end, "UNKNOWN_MAPSIZE"),
+      gameSpeed = configurationTypeName("Speeds", "SpeedType", safeCall(function()
+        return GameConfiguration.GetGameSpeedType()
+      end, nil), "UNKNOWN_SPEED"),
+      mapSize = configurationTypeName("MapSizes", "MapSizeType", safeCall(function()
+        return GameConfiguration.GetMapSize()
+      end, nil), configurationTypeName("Maps", "MapSizeType", safeCall(function()
+        return GameConfiguration.GetMapSize()
+      end, nil), "UNKNOWN_MAPSIZE")),
       isMultiplayer = safeCall(function()
         return GameConfiguration.IsAnyMultiplayer()
-      end, false)
+      end, false),
+      humanPlayerCount = countHumanPlayers()
     },
     localPlayer = collectLocalPlayer(localPlayerId),
     modules = modules,

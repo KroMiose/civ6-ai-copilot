@@ -40,7 +40,10 @@ export interface DecisionBrief {
     exportedTiles: number;
     truncated: boolean;
     tileLimit?: number;
+    worldCities: number;
+    worldResources: number;
   };
+  session: Record<string, unknown>;
   selection?: { city?: string; unit?: string };
   limits: string[];
 }
@@ -54,6 +57,7 @@ export function buildDecisionBrief(snapshot: Record<string, any>): { brief: Deci
   const gaps: CoverageGap[] = [
     ...domainGaps(snapshot),
     ...mapGaps(snapshot),
+    ...sessionGaps(snapshot.session),
     {
       kind: "not-collected",
       subject: "greatWorks",
@@ -115,8 +119,11 @@ export function buildDecisionBrief(snapshot: Record<string, any>): { brief: Deci
       map: {
         exportedTiles: arrayOf(snapshot.visibleMap?.tiles).length,
         truncated: snapshot.visibleMap?.truncated === true,
-        tileLimit: typeof snapshot.visibleMap?.tileLimit === "number" ? snapshot.visibleMap.tileLimit : undefined
+        tileLimit: typeof snapshot.visibleMap?.tileLimit === "number" ? snapshot.visibleMap.tileLimit : undefined,
+        worldCities: arrayOf(snapshot.visibleMap?.worldIndex?.cities).length,
+        worldResources: arrayOf(snapshot.visibleMap?.worldIndex?.resources).length
       },
+      session: sessionRow(snapshot.session),
       selection: {
         city: snapshot.selection?.city?.status === "selected" ? text(snapshot.selection.city.id) : undefined,
         unit: snapshot.selection?.unit?.status === "selected" ? text(snapshot.selection.unit.id) : undefined
@@ -208,6 +215,9 @@ function unitRow(snapshot: Record<string, any>, unit: Record<string, any>, own: 
     owner: describeOwner(unit.ownerPlayerId, snapshot),
     own,
     damage: unit.damage,
+    originalOwner: typeof unit.originalOwnerPlayerId === "number" ? describeOwner(unit.originalOwnerPlayerId, snapshot) : undefined,
+    isLevied: unit.isLevied === true,
+    levyTurnsRemaining: unit.levyTurnsRemaining,
     combatStrength: unit.combatStrength,
     rangedStrength: unit.rangedStrength,
     combatStrengthMeaning: "combatStrength 是满编基础战斗力。damage 是已受伤害，不能把只有基础战斗力当成满血。"
@@ -267,6 +277,35 @@ function domainGaps(snapshot: Record<string, any>): CoverageGap[] {
     }
     return [];
   });
+}
+
+function sessionRow(session: Record<string, any> | undefined): Record<string, unknown> {
+  return {
+    gameTurn: session?.gameTurn,
+    ruleset: session?.ruleset,
+    gameSpeed: session?.gameSpeed,
+    mapSize: session?.mapSize,
+    isMultiplayer: session?.isMultiplayer,
+    humanPlayerCount: session?.humanPlayerCount
+  };
+}
+
+function sessionGaps(session: Record<string, any> | undefined): CoverageGap[] {
+  const gaps: CoverageGap[] = [];
+  if (!session || looksUnresolved(session.gameSpeed)) {
+    gaps.push({ kind: "not-collected", subject: "gameSpeed", effect: "游戏速度没有可读名称，不能把哈希或 UNKNOWN 当成标准、快速或史诗。" });
+  }
+  if (!session || looksUnresolved(session.mapSize)) {
+    gaps.push({ kind: "not-collected", subject: "mapSize", effect: "地图大小没有可读名称。" });
+  }
+  if (typeof session?.humanPlayerCount !== "number") {
+    gaps.push({ kind: "not-collected", subject: "humanPlayerCount", effect: "人类席位数量未记录。" });
+  }
+  return gaps;
+}
+
+function looksUnresolved(value: unknown): boolean {
+  return typeof value !== "string" || value.length === 0 || value.startsWith("UNKNOWN") || /^-?\d+$/.test(value);
 }
 
 function mapGaps(snapshot: Record<string, any>): CoverageGap[] {

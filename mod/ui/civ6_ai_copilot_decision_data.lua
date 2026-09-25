@@ -928,8 +928,8 @@ local function collectCityStates(localPlayerId, context)
                       name = lookupText(context, name),
                       envoys = tokens
                     }
-                    if suzerainOk and type(suzerainId) == "number" then
-                      -- Keep only the local yes/no fact; never emit another player's ID.
+                    if suzerainOk and type(suzerainId) == "number" and suzerainId >= 0 then
+                      record.suzerainPlayerId = suzerainId
                       record.isSuzerain = suzerainId == localPlayerId
                     else
                       lowConfidence = true

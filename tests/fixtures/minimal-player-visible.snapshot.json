@@ -3,7 +3,7 @@
   "exportedAt": "2026-07-06T08:00:00.000Z",
   "source": {
     "modId": "civ6-ai-copilot",
-    "modVersion": "0.3.6",
+    "modVersion": "0.3.7",
     "compatVersion": "0.3",
     "transport": "lua-log",
     "visibilityMode": "player-visible",

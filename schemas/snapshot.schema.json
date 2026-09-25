@@ -55,6 +55,7 @@
         "ruleset": { "type": "string" },
         "gameSpeed": { "type": "string" },
         "mapSize": { "type": "string" },
+        "humanPlayerCount": { "type": "integer", "minimum": 0 },
         "isMultiplayer": { "type": "boolean" },
         "idScope": { "type": "string", "enum": ["load"] }
       }
@@ -89,6 +90,40 @@
         "truncated": { "type": "boolean" },
         "tileLimit": { "type": "integer", "minimum": 1 },
         "revealedTileCount": { "type": "integer", "minimum": 0 },
+        "worldIndex": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "truncated": { "type": "boolean" },
+            "cities": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["x", "y"],
+                "additionalProperties": false,
+                "properties": {
+                  "x": { "type": "integer" },
+                  "y": { "type": "integer" },
+                  "ownerPlayerId": { "type": "integer" },
+                  "name": { "type": "string" }
+                }
+              }
+            },
+            "resources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["x", "y", "resourceType"],
+                "additionalProperties": false,
+                "properties": {
+                  "x": { "type": "integer" },
+                  "y": { "type": "integer" },
+                  "resourceType": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
         "bounds": {
           "type": "object",
           "additionalProperties": false,
@@ -337,6 +372,9 @@
         "type": { "type": "string" },
         "name": { "type": "string" },
         "ownerPlayerId": { "type": "integer" },
+        "originalOwnerPlayerId": { "type": "integer", "minimum": 0 },
+        "isLevied": { "type": "boolean" },
+        "levyTurnsRemaining": { "type": "integer", "minimum": 0 },
         "x": { "type": "integer" },
         "y": { "type": "integer" },
         "damage": { "type": "integer", "minimum": 0 },
@@ -564,6 +602,7 @@
               "name": { "type": "string" },
               "envoys": { "type": "integer", "minimum": 0 },
               "isSuzerain": { "type": "boolean" },
+              "suzerainPlayerId": { "type": "integer", "minimum": 0 },
               "rewards": {
                 "type": "object",
                 "additionalProperties": false,

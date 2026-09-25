@@ -156,7 +156,7 @@ function renderTileLabel(
 ): string {
   const { cx, cy } = hexCenter(tile, bounds, layout, padding, headerHeight);
   const city = tile.cityId ? cityById.get(tile.cityId) : undefined;
-  const resource = level === "local" ? readableName(tile.resourceType) : shortResource(tile.resourceType);
+  const resource = readableName(tile.resourceType);
   const label = level === "local" ? resource : (city?.name ?? resource);
   const yieldLine = level === "local" ? formatYields(tile.yields) : "";
   const resourceAttr = tile.resourceType ? ` data-resource-type="${escapeXml(tile.resourceType)}"` : "";

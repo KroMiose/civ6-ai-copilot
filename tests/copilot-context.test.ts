@@ -22,6 +22,8 @@ test("context returns a decision brief instead of the raw export", async () => {
     assert.equal(report.status, "ready", encoded);
     assert.equal(report.identity?.exportId, "context-export-0001");
     assert.equal(report.brief?.cities[0]?.name, "Capital");
+    assert.equal(report.brief?.session?.gameSpeed, "GAMESPEED_ONLINE");
+    assert.ok(report.gaps.some((gap) => gap.subject === "humanPlayerCount"));
     assert.equal(report.brief?.policies.government, "Chiefdom");
     assert.equal(report.brief?.diplomacy[0]?.relationship, "at-war");
     assert.equal(encoded.includes("TERRAIN_GRASS"), false);
@@ -63,6 +65,9 @@ test("city and unit expansion keep non-zero player ids and one entity", async ()
     const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
     snapshot.localPlayer.localPlayerId = 2;
     snapshot.units[0].ownerPlayerId = 2;
+    snapshot.units[0].originalOwnerPlayerId = 15;
+    snapshot.units[0].isLevied = true;
+    snapshot.units[0].levyTurnsRemaining = 18;
     snapshot.cities[0].ownerPlayerId = 2;
     await writeLatest(snapshotDir, "context-export-expand", snapshot);
     const report = await runCopilotContext({
@@ -79,6 +84,8 @@ test("city and unit expansion keep non-zero player ids and one entity", async ()
     assert.equal((report.detail?.city as { coverage?: string }).coverage, "1/1");
     assert.ok((report.detail?.city as { city?: { buildings?: unknown } }).city?.buildings);
     assert.equal((report.detail?.unit as { coverage?: string }).coverage, "1/2");
+    assert.equal((report.brief?.units.own[0] as { isLevied?: boolean }).isLevied, true);
+    assert.equal((report.brief?.units.own[0] as { levyTurnsRemaining?: number }).levyTurnsRemaining, 18);
   } finally {
     await rm(snapshotDir, { recursive: true, force: true });
   }
