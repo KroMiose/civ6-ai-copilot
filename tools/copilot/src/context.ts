@@ -31,19 +31,31 @@ export interface CopilotContextReport {
     protocolVersion?: string;
     schemaVersion?: string;
   };
-  refresh: CopilotRefreshReport;
-  preflight?: {
-    checks: CopilotPreflightReport["checks"];
+  refresh: {
+    mode: CopilotRefreshReport["mode"];
+    attempted: boolean;
+    ok: boolean;
+    reused: boolean;
+    exportId?: string;
+  };
+  diagnostics?: {
+    checks?: CopilotPreflightReport["checks"];
     issues: string[];
     warnings: string[];
   };
-  summary?: SnapshotSummary;
-  context?: Record<string, unknown>;
-  canonical: {
-    snapshotDir: string;
-    snapshotPath?: string;
-    manifestPath?: string;
+  analysis?: {
+    intents: string[];
+    requiredModules: string[];
+    counts: SnapshotSummary["coverage"]["counts"];
+    availableModules: string[];
+    notApplicableModules: string[];
+    unavailableModules: string[];
+    limitedModules: string[];
+    lowConfidenceModules: string[];
+    highlights: SnapshotSummary["highlights"];
+    gaps: string[];
   };
+  context?: Record<string, unknown>;
   userActions: string[];
 }
 
@@ -93,8 +105,8 @@ export async function runCopilotContext(options: CopilotContextOptions = {}): Pr
       exitCode: refresh.exitCode,
       generatedAt: new Date().toISOString(),
       query: options.question,
-      refresh,
-      canonical: { snapshotDir: paths.snapshotDir },
+      refresh: compactRefresh(refresh),
+      diagnostics: { issues: [refresh.summary], warnings: [] },
       userActions: refreshActions(refresh, paths)
     };
   }
@@ -115,14 +127,9 @@ export async function runCopilotContext(options: CopilotContextOptions = {}): Pr
       exitCode: preflight.exitCode,
       generatedAt: new Date().toISOString(),
       query: options.question,
-      refresh,
-      preflight: compactPreflight(preflight),
-      summary: preflight.summary,
-      canonical: {
-        snapshotDir: paths.snapshotDir,
-        snapshotPath: preflight.snapshotPath,
-        manifestPath: preflight.manifestPath
-      },
+      refresh: compactRefresh(refresh),
+      diagnostics: compactDiagnostics(preflight),
+      analysis: preflight.summary ? compactAnalysis(preflight.summary) : undefined,
       userActions: preflight.nextActions
     };
   }
@@ -148,15 +155,10 @@ export async function runCopilotContext(options: CopilotContextOptions = {}): Pr
       protocolVersion: text(snapshot.source?.protocolVersion),
       schemaVersion: text(snapshot.schemaVersion)
     },
-    refresh,
-    preflight: compactPreflight(preflight),
-    summary: preflight.summary,
+    refresh: compactRefresh(refresh),
+    diagnostics: compactDiagnostics(preflight),
+    analysis: compactAnalysis(preflight.summary),
     context,
-    canonical: {
-      snapshotDir: paths.snapshotDir,
-      snapshotPath: preflight.snapshotPath,
-      manifestPath: preflight.manifestPath
-    },
     userActions: []
   };
 }
@@ -216,10 +218,37 @@ function integer(value: unknown): number | undefined {
   return Number.isInteger(value) ? Number(value) : undefined;
 }
 
-function compactPreflight(preflight: CopilotPreflightReport): CopilotContextReport["preflight"] {
+function compactRefresh(refresh: CopilotRefreshReport): CopilotContextReport["refresh"] {
+  const result = refresh.result;
+  const exportId = result && "exportId" in result ? result.exportId : undefined;
+  return {
+    mode: refresh.mode,
+    attempted: refresh.attempted,
+    ok: refresh.ok,
+    reused: Boolean(result && "skipped" in result && result.skipped),
+    exportId
+  };
+}
+
+function compactDiagnostics(preflight: CopilotPreflightReport): CopilotContextReport["diagnostics"] {
   return {
     checks: preflight.checks,
     issues: preflight.issues,
     warnings: preflight.warnings
+  };
+}
+
+function compactAnalysis(summary: SnapshotSummary): NonNullable<CopilotContextReport["analysis"]> {
+  return {
+    intents: summary.syncAdvice.intents,
+    requiredModules: summary.syncAdvice.requiredModules,
+    counts: summary.coverage.counts,
+    availableModules: summary.coverage.availableModules,
+    notApplicableModules: summary.syncAdvice.notApplicableModules,
+    unavailableModules: summary.syncAdvice.unavailableModules,
+    limitedModules: summary.syncAdvice.limitedModules,
+    lowConfidenceModules: summary.syncAdvice.lowConfidenceModules,
+    highlights: summary.highlights,
+    gaps: summary.gaps
   };
 }
