@@ -16,7 +16,7 @@ test("offline smoke runs the full fake Lua.log copilot loop", async () => {
     });
 
     assert.equal(report.ok, true, JSON.stringify(report, null, 2));
-    assert.equal(report.steps.map((step) => step.id).join(","), "fake-lua-log,bridge,doctor,preflight,summary,render-map,handoff");
+    assert.equal(report.steps.map((step) => step.id).join(","), "fake-lua-log,bridge,doctor,preflight,context,summary,render-map,handoff");
     assert.equal(report.steps.every((step) => step.status === "pass"), true);
     assert.ok(report.latestPath);
     assert.ok(report.manifestPath);
