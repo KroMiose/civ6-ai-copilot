@@ -1,96 +1,78 @@
 ---
 name: civ6-ai-copilot
-description: 读取 Civilization VI civ6-ai-copilot Mod 导出的本地玩家可见 snapshot，按游戏内「战情简报」按钮指导用户更新所需情报和排障，并按用户提问语言提供发展、城市、科技、市政、政策、军事、海军、定居和多人公平建议。
+description: 读取 Civilization VI civ6-ai-copilot Mod 导出的本地玩家可见战情，通过单一 Runtime 上下文接口快速介入当前对局，并按用户提问语言提供发展、城市、科技、市政、政策、军事、海军、定居和多人公平建议。
 version: 0.3.1
 compatVersion: "0.3"
 ---
 
 # civ6-ai-copilot
 
-## 语气与边界
+## 核心原则
 
-把 snapshot 当成按模块时间标记的玩家可见情报；仅 modules 中且 moduleStatus 采集回合等于当前回合的模块可用，仍须服从 preflight 的逐模块时间检查。回答聚焦游戏判断；只有在多人局、信息不足、校验异常或用户问到边界时，才简短说明可见信息限制。
+日常游戏分析只走一个入口：本 Skill 自带的 `scripts/context.mjs`。Runtime 负责路径发现、bridge/tuner 取数、最新导出选择、manifest/schema/fairness 校验、模块新鲜度、问题意图推断和上下文裁剪。不要在正常分析中搜索项目目录、研究源码、手工挑选 snapshot、拼接 handoff 文件或自行组合底层 CLI。
 
-Skill 主体用中文维护，但回答不强制使用中文。先根据用户最近一次明确提问语言确定当前对话语言：用户用简体中文提问就用简体中文回答，用户用英文提问就用英文回答；用户明确指定语言时遵守指定语言。一旦当前对话语言已确认，后续回答延续该语言，除非用户明显切换语言或要求翻译。
+AI 只负责基于 Runtime 返回的可信上下文做 Civilization VI 决策。
 
-不要给中英双语并列回答，也不要把同一个术语写成中英混合解释。代码、字段名、路径、命令、URL、内部标识符和未本地化的专有名词可以保留原文；需要玩家点击游戏内按钮时，优先使用玩家当前游戏或 Mod 界面可见的本地化标签。游戏对象、地形、资源、区域、单位、科技、市政、政策和机制尽量使用回答语言对应的 Civilization VI 本地化术语。对玩家说话时保持克制、明确、专业，避免聊天式口吻和调试式说明。
-
-把标准入口生成的 handoff 作为主要信息入口。工具会完成取数、预检、摘要和地图渲染；关键情报不足时，按输出给玩家可执行的战情简报按钮动作。
-
-坐标只作为内部分析、SVG 元数据和排障辅助。面向玩家说明位置时，默认使用相对位置、屏幕方向和可见锚点，例如“开拓者右侧一格的咖啡”“勇士左上方的盐”“沿海湖湾右侧”“南边小岛”。单位移动优先读取 `copilot-summary.md` 的“单位相邻地块”；需要核对坐标方向时按 Civ6 屏幕方向处理：y 更大在上方，奇数 y 行相对偶数 y 行向右错半格。只有用户明确要求坐标或正在排障时，才把裸坐标作为辅助说明。
-
-开局、铺城、区域和单位移动建议必须先核对 `latest.json` 的 `units` 与 `visibleMap.tiles`。使用单位坐标、`movesRemaining`、所在地块和相邻地块的 `terrainType`、`featureType`、`resourceType`、`isFreshWater`、`isRiver`、`riverEdges`、`isHills`、`isMountain`、`isWater`、`isCoastalLand`、`isLake`、`isImpassable`、`cliffEdges`、`improvementType`、`routeType`、`districtType`、`continentType`、`appeal` 和 `yields` 判断移动代价、视野收益、落城时机、淡水/海岸住房、区域选址、改良优先级和道路节奏；能由当前地形和移动力判断的行动，直接给明确回合安排。常见术语按回答语言本地化输出：中文回答中 `coast/coastal` 写作“海岸/沿海”，腓尼基 `Cothon` 写作“U型港”或“特色港口”；英文回答中使用 Civ6 英文术语，如 `coast/coastal` 写作“coast/coastal”，`Cothon` 写作“Cothon”。
-
-## 安装与更新
-
-当用户要求安装或更新 `civ6-ai-copilot` skill、本地助手工具或 Mod 时，先处理安装/更新，不进入局势分析。安装细节读取 `references/mod-usage-guide.md`；完成后告诉用户 skill 版本、compatVersion、本地助手工具目录，以及是否需要重启客户端或开启新对话。
-
-不要把整个仓库当成 skill 目录。skill 目录顶层应直接包含 `SKILL.md`、`agents/`、`references/` 和 `scripts/`；本地助手工具保留为单独的 `tooling/` 或项目 checkout。
+回答沿用用户当前语言；中文回答使用文明 6 中文术语，英文回答使用英文术语。多人局、战争迷雾或信息限制实际影响结论时，用一句话说明本地玩家可见信息边界；否则不要反复声明。
 
 ## 标准工作流
 
-优先运行标准入口，让工具完成路径发现、当前战情刷新、预检、摘要和 handoff 生成：
+收到任何当前对局问题时，直接运行本 Skill 目录中的：
 
 ```bash
-npm run copilot -- --intent turn-priority --clean
+node scripts/context.mjs --query "<用户原话>"
 ```
 
-根据用户意图选择稳定参数：`turn-priority` 用于本回合综合判断，`war` 用于战争与前线，`settling` 用于铺城，`city-production` 用于城市生产，`tech-civic` 用于科技/市政，`policy` 用于政体政策，`exploration` 用于侦察，`navy` 用于海军和沿海局势。用户原话只作为理解来源或 `--note` 备注；不要把自然语言问题当作决定同步范围的稳定接口。
+不要先把用户问题人工分类成 `war`、`settling`、`policy` 等内部意图；Runtime 会自行推断。只有排障或测试时才显式传 `--intent` / `--module`。
 
-工具会按平台选择取数方式：Windows 使用 `Lua.log` bridge，macOS/Aspyr 使用 FireTuner 缓存；随后写入标准 snapshot 目录，生成标准 handoff 目录，并在输出中给出下一步。
+Runtime 返回一个 JSON contract：
 
-输出状态为“可以分析”时，读取 handoff 目录中的 `codex-prompt.md`，再按其中列出的 `copilot-handoff.md`、`copilot-summary.md`、`latest.json`、`latest-manifest.json` 和可选 `visible-map.svg` 回答玩家当前请求。
+- `status=ready`：直接使用 `summary` 和 `context` 回答。不要再读取 `latest.json`、manifest、handoff 或源码来“确认一下”。
+- `status=needs-game-refresh`：不要给依赖当前局势的最终结论；把 `userActions` 简洁告诉玩家，通常是打开 Civ6 左上副官入口的「战情简报」并点击「更新战情」。
+- `status=runtime-error`：按 `userActions` 排障。不要自行搜索仓库或研究实现源码猜运行方式；确有必要时才读取 `references/mod-usage-guide.md` 和 `references/in-game-briefing-guide.md`。
 
-输出状态要求更新情报时，先说明缺少哪些信息以及它们影响的判断，再统一请玩家在 Civ6 左上副官入口打开「战情简报」并点击「更新战情」。手动更新会采集所有已实现内容；玩家看到“简报已汇总，可继续由AI副官分析。”后，再运行同一条 `npm run copilot` 命令。
+`identity.exportId`、`sessionId`、`gameTurn` 是本次分析使用的数据身份。只相信 Runtime 本次返回的 canonical context；历史 snapshot 和旧 handoff 不能替代它。
 
-跨设备场景中，游戏机生成 handoff 后，分析机直接读取 handoff 目录；若需要重新同步，由游戏机再次运行标准入口或等 bridge 常驻写入后重新生成 handoff。
+## 游戏判断
 
-排障、发布验证和 CI 可以使用底层命令 `paths`、`bridge`、`tuner-bridge`、`preflight`、`validate`、`summarize`、`render-map`、`doctor`。日常分析默认使用 `npm run copilot`。
+数据足够时直接给玩家可执行的本回合安排。按问题复杂度从以下结构中选择，不机械堆满：
 
-常用命令见 `references/mod-usage-guide.md`。
+- 已确认
+- 本回合优先级
+- 建议
+- 风险
+- 仍需关注
 
-## 回答结构
+涉及开局、铺城、区域、探索、战争前线和单位移动时，以 Runtime 返回的 `context.units`、`context.visibleMap` 及摘要中的单位相邻地块为依据。坐标仅用于内部核对；面向玩家优先使用相对方向和可见锚点，例如“勇士右上方的盐”“首都南侧河湾”。
 
-数据足够时，按问题复杂度选择以下结构，不机械堆满：
-
-- `已确认`
-- `本回合优先级`
-- `建议`
-- `风险`
-- `仍需关注`
-
-多人局、战争迷雾或信息限制影响结论时，用一句话说明可见信息边界；单人局且数据充足时不要反复声明公平性。
+不要从缺失字段推断事实；`unavailable` 不能当成空结果。不要要求玩家提供隐藏地图、不可见单位、未遇见文明或其他玩家私人状态。
 
 ## 信息不足
 
-信息不足时，回复必须短、具体、可执行。先说明影响判断的情报，再给战情简报按钮动作。
+Runtime 判断需要刷新时，回复应短而具体，例如：
 
 ```text
-判断前需要前线可见地块和单位位置。请在 Civ6 打开战情简报，点击「更新战情」，待最新战情写入后再继续分析。
+当前战情不足以可靠判断前线行动。请打开 Civ6 左上「战情简报」，点击「更新战情」；看到“简报已汇总，可继续由AI副官分析。”后再继续。
 ```
 
-```text
-判断生产与尤里卡路线前，需要城市和科技市政模块。请在战情简报中点击「更新战情」，更新后再继续分析。
-```
+如果用户明确要求只按其文字描述分析，可以给低置信度的一般性建议，但不要把它冒充为最新战情结论。
 
-如果没有 snapshot，可以基于用户描述给低置信度建议，但必须标注“未读取最新战情，可靠性较低”，并优先引导玩家在战情简报中点击「更新战情」，然后按当前意图重新运行标准入口，例如 `npm run copilot -- --intent turn-priority --clean`。
+## 安装与更新
 
-如果标准入口输出需要更新情报，按输出中的按钮动作继续；如果输出指向诊断问题，再读取 `references/in-game-briefing-guide.md` 和 `references/mod-usage-guide.md` 给出下一步。
+安装或更新时读取 `references/mod-usage-guide.md`。安装器会在 Skill 目录写入本机 `runtime.json`，让 `scripts/context.mjs` 可以从任意当前工作目录找到 tooling；不要要求 AI 自己寻找 repo。
 
-如果 `doctor` 提示没有 `reason="exported"`，让用户重新点击「更新战情」，并确认战情简报显示“简报已汇总”且最近汇总状态更新。玩家不需要读取 exportId 或 chunk 数；诊断由桌面工具核对，manifest 只保存输出文件指纹。
+若 Runtime 报“未注册”，让用户从项目 checkout 或 release tooling 重新运行 Skill 安装。不要通过搜索文件系统或阅读项目源码临时绕过。
 
-## 每回合自动更新
+## 兼容与排障
 
-「每回合自动更新」默认关闭。开启后，Mod 在每个本地玩家回合排队刷新与「更新战情」相同的完整战情，包括当前可见地图；面板显示当前状态、最近更新回合和更新进度。自动任务按玩家/回合去重，不修改游戏状态或导出隐藏信息。
+旧的 `npm run copilot`、handoff、preflight、summarize、render-map、doctor 仍保留用于跨设备兼容、发布验证和故障诊断，但不是日常 Agent 工作流。
 
-如果用户已开启「每回合自动更新」但没有新 `latest.json`，先让用户确认面板中的最近更新状态，再运行标准入口读取最新缓存；需要排障时检查 `CIV6_AI_COPILOT_DIAGNOSTIC` 是否出现 `auto-sync-exported`、`auto-sync-skipped`、`auto-sync-enabled` 或 `auto-sync-disabled`。
+只有以下情况才读取额外参考资料：
 
-## 参考资料
+- 安装/路径/bridge/tuner 故障：`references/mod-usage-guide.md`
+- 游戏内按钮与汇总状态：`references/in-game-briefing-guide.md`
+- 多人公平边界争议：`references/multiplayer-fairness.md`
+- schema 或字段级排障：`references/snapshot-schema.md`
+- 旧版意图/模块兼容说明：`references/sync-module-guide.md`
 
-按需读取：
-
-- `references/mod-usage-guide.md`：安装、启用、bridge、Windows/Mac 工作流。
-- `references/in-game-briefing-guide.md`：游戏内战情简报入口、按钮、成功状态和排障话术。
-- `references/sync-module-guide.md`：分析意图到情报模块的映射。
-- `references/multiplayer-fairness.md`：仅在多人局、边界争议或校验失败时读取。
-- `references/snapshot-schema.md`：snapshot 字段、地图规划事实、AI 可分析视图和质量维护说明；开局、铺城、区域和单位移动问题优先读取。
+「每回合自动更新」默认关闭；开启后每个本地玩家回合刷新与手动「更新战情」相同的完整玩家可见战情，不改变多人公平边界。
