@@ -250,7 +250,7 @@ const intentRules = [
   },
   {
     id: "turn-priority",
-    modules: ["meta", "localPlayer", "selection", "cities", "units", "governors", "trade", "cityStates", "techs", "civics", "government", "policies", "resources", "economy", "diplomacyPublic"]
+    modules: ["meta", "localPlayer", "selection", "cities", "units", "governors", "trade", "cityStates", "techs", "civics", "government", "policies", "resources", "economy", "diplomacyPublic", "visibleMap"]
   }
 ];
 
