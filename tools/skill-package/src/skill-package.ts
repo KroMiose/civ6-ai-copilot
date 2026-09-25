@@ -421,7 +421,7 @@ async function buildManifestFiles(packageDir: string): Promise<SkillPackageManif
   const files = await listFiles(packageDir);
   const manifestFiles: SkillPackageManifestFile[] = [];
   for (const relativePath of files) {
-    if (relativePath === SKILL_PACKAGE_MANIFEST_FILE) {
+    if (relativePath === SKILL_PACKAGE_MANIFEST_FILE || relativePath === "runtime.json") {
       continue;
     }
     const absolutePath = path.join(packageDir, relativePath);
