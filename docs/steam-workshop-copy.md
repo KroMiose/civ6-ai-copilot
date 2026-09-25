@@ -53,7 +53,7 @@ This is a passive UI / Utility Mod. It does not change rules, maps, units, resou
 Changenote:
 
 ```text
-0.1.1 improves the briefing panel layout and reduces in-game freezes by splitting map scan, checksum, and snapshot writing work across frames.
+0.3.1 adds a single full briefing update, optional full refresh each local turn, and richer city, unit, governor, trade, and city-state data. It also improves the panel and player-visible map handling. Update the Agent Skill and local tools together: this release uses the 0.3 data protocol. Real-game and two-player testing is still pending.
 ```
 
 ## Simplified Chinese
@@ -107,5 +107,5 @@ Steam Workshop 只安装 Civ6 Mod。要让 AI 副官读取战情，请把下面�
 Changenote:
 
 ```text
-0.1.1 优化战情简报面板排版，并将地图扫描、校验和快照写入拆分到多帧执行，降低游戏界面长时间卡住的体验。
+0.3.1 统一「更新战情」完整采集，支持可选的每回合完整自动更新，并补充城市、单位、总督、商路和城邦等决策数据；同时优化面板与玩家可见地图采集。请同步更新 Agent Skill 和本地工具，本版使用 0.3 数据协议。实机和双人测试仍待完成。
 ```
