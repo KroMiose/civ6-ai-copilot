@@ -255,6 +255,7 @@ const intentRules = [
 ];
 
 const questionRules = [
+  { id: "turn-priority", patterns: [/本回合/, /这回合/, /这一回合/, /优先级/, /先做什么/, /该做什么/, /做什么/, /怎么行动/, /what.*turn/i, /this turn/i, /priority/i] },
   { id: "war", patterns: [/战争/, /开战/, /打仗/, /进攻/, /防守/, /前线/, /围城/, /\bwar\b/i, /\battack\b/i, /\bdefen[cs]e\b/i] },
   { id: "navy", patterns: [/海军/, /舰队/, /港口/, /岛/, /海岸/, /\bnavy\b/i, /\bcoast/i] },
   { id: "exploration", patterns: [/探索/, /侦察/, /探路/, /开图/, /探图/, /勇士/, /斥候/, /走哪/, /往哪里/, /\bexplor/i, /\bscout/i] },
@@ -1041,11 +1042,6 @@ function buildSyncAdvice(
         .map((rule) => intentRules.find((intentRule) => intentRule.id === rule.id))
         .filter((rule): rule is (typeof intentRules)[number] => Boolean(rule))
     : [];
-
-  if (explicitModules.length === 0 && matchedRules.length === 0 && (!question || question.trim().length === 0)) {
-    const defaultRule = intentRules.find((rule) => rule.id === "turn-priority");
-    matchedRules = defaultRule ? [defaultRule] : [];
-  }
 
   const requiredModules = explicitModules.length > 0
     ? explicitModules
