@@ -45,8 +45,8 @@
 
 ## 平台回传
 
-- 单机或同机分析：玩家完成点击后，终端按当前意图运行标准入口，例如 `npm run copilot -- --intent turn-priority --clean`。
-- Windows 游戏机 + Mac Agent：Windows 侧完成点击后运行标准入口，生成并同步 handoff；Mac 侧读取 handoff。
+- 单机或同机分析：玩家完成点击后，运行 `node scripts/context.mjs` 读取简报。
+- Windows 游戏机 + Mac Agent：Windows 侧完成点击后同步最新导出；Mac 侧仍用 `context` 读取简报，不把 `codex-prompt.md` 当作日常入口。
 - 如果用户说游戏界面由自己操作，AI 只给出战情简报按钮动作，并在终端侧运行标准入口或诊断命令。
 
 ## 排障优先级

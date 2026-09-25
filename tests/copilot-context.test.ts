@@ -8,7 +8,7 @@ import { runCopilotContext } from "../tools/copilot/src/context.js";
 
 const fixturePath = path.resolve("tests/fixtures/minimal-player-visible.snapshot.json");
 
-test("context returns the full latest export when the agent does not name modules", async () => {
+test("context returns a decision brief instead of the raw export", async () => {
   const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-"));
   try {
     await writeLatest(snapshotDir, "context-export-0001");
@@ -17,46 +17,65 @@ test("context returns the full latest export when the agent does not name module
       snapshotDir,
       question: "二城应该坐哪"
     });
+    const encoded = JSON.stringify(report);
 
-    assert.equal(report.status, "ready", JSON.stringify(report, null, 2));
+    assert.equal(report.status, "ready", encoded);
     assert.equal(report.identity?.exportId, "context-export-0001");
-    assert.ok(report.context?.cities);
-    assert.ok(report.context?.visibleMap);
-    assert.ok(report.context?.government);
+    assert.equal(report.brief?.cities[0]?.name, "Capital");
+    assert.equal(report.brief?.policies.government, "Chiefdom");
+    assert.equal(report.brief?.diplomacy[0]?.relationship, "at-war");
+    assert.equal(encoded.includes("TERRAIN_GRASS"), false);
+    assert.equal(report.brief?.map.exportedTiles, 2);
+    assert.ok(report.gaps.some((gap) => gap.subject === "greatWorks" && gap.kind === "not-collected"));
   } finally {
     await rm(snapshotDir, { recursive: true, force: true });
   }
 });
 
-test("the player question does not change which modules are returned", async () => {
+test("the player question does not change the brief", async () => {
   const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-query-"));
   try {
     await writeLatest(snapshotDir, "context-export-query");
     const settling = await runCopilotContext({ refreshMode: "none", snapshotDir, question: "二城应该坐哪" });
     const policy = await runCopilotContext({ refreshMode: "none", snapshotDir, question: "政策卡怎么换" });
-    assert.deepEqual(settling.modules, policy.modules);
-    assert.deepEqual(Object.keys(settling.context ?? {}).sort(), Object.keys(policy.context ?? {}).sort());
+    assert.deepEqual(settling.brief, policy.brief);
   } finally {
     await rm(snapshotDir, { recursive: true, force: true });
   }
 });
 
-test("context returns only the modules the agent selected", async () => {
-  const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-modules-"));
+test("raw writes a file and does not inline the snapshot", async () => {
+  const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-raw-"));
   try {
-    await writeLatest(snapshotDir, "context-export-modules");
+    await writeLatest(snapshotDir, "context-export-raw");
+    const report = await runCopilotContext({ refreshMode: "none", snapshotDir, raw: true });
+    assert.equal(JSON.stringify(report).includes("TERRAIN_GRASS"), false);
+    const raw = JSON.parse(await readFile(report.artifacts!.raw!.path, "utf8"));
+    assert.equal(raw.visibleMap.tiles[0].terrainType, "TERRAIN_GRASS");
+  } finally {
+    await rm(snapshotDir, { recursive: true, force: true });
+  }
+});
+
+test("city and unit expansion keep non-zero player ids and one entity", async () => {
+  const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-expand-"));
+  try {
+    const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
+    snapshot.localPlayer.localPlayerId = 2;
+    snapshot.units[0].ownerPlayerId = 2;
+    snapshot.cities[0].ownerPlayerId = 2;
+    await writeLatest(snapshotDir, "context-export-expand", snapshot);
     const report = await runCopilotContext({
       refreshMode: "none",
       snapshotDir,
-      modules: ["cities", "units", "visibleMap", "resources"]
+      city: "Capital",
+      unit: "Archer"
     });
-
-    assert.equal(report.status, "ready");
-    assert.ok(report.context?.cities);
-    assert.ok(report.context?.units);
-    assert.ok(report.context?.visibleMap);
-    assert.equal(report.context?.government, undefined);
-    assert.equal(report.context?.techs, undefined);
+    assert.equal(report.brief?.player.id, 2);
+    assert.equal(report.brief?.units.own[0]?.name, "Archer");
+    assert.equal((report.detail?.city as { coverage?: string }).coverage, "1/1");
+    assert.ok((report.detail?.city as { city?: { buildings?: unknown } }).city?.buildings);
+    assert.equal((report.detail?.unit as { coverage?: string }).coverage, "1/2");
   } finally {
     await rm(snapshotDir, { recursive: true, force: true });
   }
@@ -78,10 +97,11 @@ test("unavailable requested modules stay in a ready result as gaps", async () =>
     });
 
     assert.equal(report.status, "ready", JSON.stringify(report, null, 2));
-    assert.ok(report.context?.cities);
-    assert.match(report.gaps.join("\n"), /governors/);
-    assert.match(report.gaps.join("\n"), /trade/);
-    assert.match(report.gaps.join("\n"), /cityStates/);
+    assert.ok(report.brief?.cities[0]);
+    const effects = report.gaps.map((gap) => `${gap.subject} ${gap.effect}`).join("\n");
+    assert.match(effects, /governors/);
+    assert.match(effects, /trade/);
+    assert.match(effects, /cityStates/);
   } finally {
     await rm(snapshotDir, { recursive: true, force: true });
   }
@@ -97,7 +117,7 @@ test("adjacent-units uses odd-r neighbors from the current export", async () => 
       modules: ["units", "visibleMap"],
       adjacentUnits: true
     });
-    const adjacent = report.context?.adjacentUnits as Array<{ name?: string; x: number; y: number; adjacentTiles: Array<{ direction: string; x: number; y: number; terrainType?: string }> }>;
+    const adjacent = report.detail?.adjacentUnits as Array<{ name?: string; x: number; y: number; adjacentTiles: Array<{ direction: string; x: number; y: number; terrainType?: string }> }>;
     const archer = adjacent.find((unit) => unit.name === "Archer");
     assert.ok(archer);
     assert.equal(archer.y % 2, 0);
@@ -140,7 +160,7 @@ test("map levels use the requested radius and omit the full tile list", async ()
     });
 
     assert.equal(report.status, "ready", JSON.stringify(report.gaps));
-    assert.equal(report.context?.visibleMap, undefined);
+    assert.equal(JSON.stringify(report).includes("TERRAIN_GRASS"), false);
     const world = report.mapViews?.find((view) => view.level === "world");
     const local = report.mapViews?.find((view) => view.level === "local");
     const region = report.mapViews?.find((view) => view.level === "region");
@@ -148,8 +168,9 @@ test("map levels use the requested radius and omit the full tile list", async ()
     assert.equal(region?.radius, 20);
     assert.equal(world?.places.tiles, undefined);
     assert.ok((local?.places.tiles as unknown[] | undefined)?.length);
-    assert.match(report.gaps.join("\n"), /20/);
-    assert.match(report.gaps.join("\n"), /不存在/);
+    const effects = report.gaps.map((gap) => gap.effect).join("\n");
+    assert.match(effects, /20/);
+    assert.match(effects, /不存在/);
     assert.equal((await stat(local!.image.path)).isFile(), true);
     assert.equal((await readFile(local!.image.path)).subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
   } finally {
@@ -170,7 +191,7 @@ test("a missing log is a runtime error and does not return an old analysis", asy
 
     assert.equal(report.status, "runtime-error");
     assert.equal(report.readyForCopilot, false);
-    assert.equal(report.context, undefined);
+    assert.equal(report.brief, undefined);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }

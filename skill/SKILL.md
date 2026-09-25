@@ -1,7 +1,7 @@
 ---
 name: civ6-ai-copilot
 description: 读取 Civilization VI civ6-ai-copilot Mod 最后一次成功汇总的本地玩家可见战情。按清单选择模块，为发展、城市、科技、市政、政策、军事、海军、定居和多人公平问题提供建议。
-version: 0.3.3
+version: 0.3.4
 compatVersion: "0.3"
 ---
 
@@ -9,44 +9,24 @@ compatVersion: "0.3"
 
 ## 怎么使用
 
-玩家点击「更新战情」并看到「简报已汇总」后，当前对局就是这一次导出。从本 Skill 目录调用，不要找仓库、不要选工作目录，也不要搜索历史 snapshot 或 handoff。
+玩家点击「更新战情」并看到「简报已汇总」后，当前对局就是这一次导出。从本 Skill 目录调用，不要找仓库、不要选工作目录，也不要搜索历史 snapshot、handoff 或自己写解析脚本。
 
-不传 `--module` 时，返回这次导出里已经采到的全部模块：
+先看简报：
 
 ```bash
 node scripts/context.mjs
 ```
 
-问题明确时，按下面的清单自己组装。`--query` 只是把用户原话带进结果，不决定读什么。
+需要看地时再要图，需要一座城或一个单位的明细时再展开。一次综合问答最多再加一张图或一次展开，并核对 `exportId` 相同。
 
 ```bash
-node scripts/context.mjs \
-  --module cities --module units --module resources \
-  --map local:unit:开拓者:5
+node scripts/context.mjs --map world
+node scripts/context.mjs --map local:city:首都:5
+node scripts/context.mjs --city 首都
+node scripts/context.mjs --unit 开拓者
 ```
 
-## 能读取的项目
-
-| 参数 | 内容 |
-| --- | --- |
-| `meta` | 回合、规则、速度、地图大小、是否多人 |
-| `localPlayer` | 本地领袖、文明、玩家编号 |
-| `selection` | 当前选中的城市或单位 |
-| `cities` | 己方城市、产出、粮食、区域与建筑 |
-| `units` | 己方单位，以及当前可见的外方单位 |
-| `visibleMap` | 玩家可见地块：地形、地貌、资源、淡水、河流、丘陵、道路、区域、吸引力、产出 |
-| `resources` | 己方资源库存 |
-| `techs` | 科技进度和可研项目 |
-| `civics` | 市政进度和可研项目 |
-| `government` | 政体 |
-| `policies` | 政策槽 |
-| `economy` | 金币、信仰、科文收入 |
-| `diplomacyPublic` | 已遇见文明的公开关系 |
-| `governors` | 总督 |
-| `trade` | 商路 |
-| `cityStates` | 已遇见城邦与使者 |
-| `adjacent-units` | 己方单位的 odd-r 相邻六格，只作文字简表 |
-| `render-map` | 整张可见图的 SVG，排障时用 |
+`--raw` 只把原始导出写到文件并返回路径，供排障。不要把该文件读进日常分析。
 
 ## 地图
 
@@ -73,7 +53,7 @@ node scripts/context.mjs --map local:coord:12,18:9 --map world
 
 返回一份 JSON。
 
-- `status=ready`：用 `context` 回答。`identity.exportId`、`sessionId`、`gameTurn`、`exportedAt` 就是这次点击。`gaps` 里的项目本次没读到，不能当成「游戏里没有」，其余项目照常使用。
+- `status=ready`：用 `brief` 回答。需要位置时看 `mapViews`，需要明细时看 `detail`。`identity.exportId` 必须和这几步一致。`gaps` 里的事项保持未知：未采集不能写成 0，城邦不可用不能写成安全，地图截断不能写成完整战场。`upgradeCost` 为 0 不是免费升级。不知道价格和许可时，不能断言购买更划算。文明特性和当前队列不是玩家已经选定的长期路线。
 - `status=needs-game-refresh`：游戏里还没有写完的导出。把 `userActions` 告诉玩家，请其点击「更新战情」。不要用历史文件顶上。
 - `status=runtime-error`：日志或 Tuner 读失败。按 `userActions` 排障。必要时再读 `references/mod-usage-guide.md`。
 

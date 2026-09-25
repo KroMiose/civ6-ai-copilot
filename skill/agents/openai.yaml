@@ -1,5 +1,5 @@
 name: civ6-ai-copilot
 description: Civilization VI player-visible snapshot copilot with language-aware in-game briefing guidance.
-version: 0.3.3
+version: 0.3.4
 compatVersion: "0.3"
 entry: SKILL.md

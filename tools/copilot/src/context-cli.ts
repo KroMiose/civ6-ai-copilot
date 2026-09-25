@@ -7,7 +7,10 @@ program
   .name("civ6-ai-copilot-context")
   .description("Return one canonical, validated Civ6 context payload for Agent analysis.")
   .option("--query <text>", "The player's question. Stored for the agent; it does not select modules.")
-  .option("--module <module>", "Module to include. Repeat or comma-separate. Omit to return every module in the latest export.", collectList, [])
+  .option("--module <module>", "Ignored for output. Raw modules are not inlined; use --city, --unit, --map, or --raw.", collectList, [])
+  .option("--city <name>", "Expand one city by name or id.")
+  .option("--unit <name>", "Expand one unit by name or id.")
+  .option("--raw", "Write the raw export to a file and return its path only.", false)
   .option("--adjacent-units", "Add odd-r adjacent tiles for the local player's units.", false)
   .option("--render-map <path>", "Write a player-visible hex SVG for this export.")
   .option("--map <spec>", "Map view. Repeat. world | region[:city|unit|coord|selection:value[:radius]] | local[:...]. Region defaults to radius 8, local to 5, maximum 20.", collectList, [])
@@ -35,6 +38,9 @@ const options = program.opts<{
   adjacentUnits: boolean;
   renderMap?: string;
   map: string[];
+  city?: string;
+  unit?: string;
+  raw: boolean;
   platform?: "win32" | "darwin" | "linux";
   home?: string;
   civ6UserDataDir?: string;
@@ -61,6 +67,9 @@ const report = await runCopilotContext({
   adjacentUnits: options.adjacentUnits,
   renderMapPath: options.renderMap,
   mapSpecs: options.map,
+  city: options.city,
+  unit: options.unit,
+  raw: options.raw,
   platform: options.platform,
   homeDir: options.home,
   civ6UserDataDir: options.civ6UserDataDir,

@@ -111,15 +111,10 @@ npm run doctor -- --input-log "<Lua.log>" --snapshot-dir "<snapshot-dir>" --form
 
 1. Windows 运行 Civ6、启用 Mod，进入对局。
 2. 玩家在战情简报中汇总或更新情报。
-3. Windows 运行标准入口生成 snapshot 与 handoff：
+3. Windows 点击「更新战情」后，把最新导出同步到 Mac。
+4. Mac 侧运行 `node scripts/context.mjs` 读取简报。需要地图或某座城时再加 `--map`、`--city` 或 `--unit`。
 
-   ```bash
-   npm run copilot -- --intent turn-priority --clean
-   ```
-
-4. Mac 侧 Agent 先读取 `<handoff-dir>/codex-prompt.md`，再读取 `copilot-handoff.md`、`copilot-summary.md`、`latest.json`、`latest-manifest.json` 和可选 `visible-map.svg`。
-
-如果 handoff 要求更新情报，照其中的战情简报按钮让用户回 Windows 操作，再重新运行标准入口并同步 handoff。
+日常分析不读取 `codex-prompt.md` 或 handoff。handoff 只留给旧的跨机排障。
 
 ## 信息不足时的回复
 

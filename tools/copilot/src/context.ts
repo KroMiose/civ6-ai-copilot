@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildCiv6AICopilotPaths, type Civ6AICopilotPaths } from "../../paths/src/civ6-paths.js";
 import { renderSnapshotMapToFile } from "../../render-map/src/render-map.js";
 import { COMPAT_VERSION, compatFromVersion } from "../../project/src/version.js";
 import { validateSnapshotObject } from "../../snapshot/src/validate.js";
 import { adjacentOwnUnits } from "./adjacent-units.js";
+import { buildDecisionBrief, expandCity, expandUnit, type CoverageGap, type DecisionBrief } from "./decision-brief.js";
 import { buildMapViews, type MapView } from "./map-view.js";
 import {
   runCopilotRefresh,
@@ -20,6 +21,9 @@ export interface CopilotContextOptions extends Omit<CopilotPrepareOptions, "hand
   adjacentUnits?: boolean;
   renderMapPath?: string;
   mapSpecs?: string[];
+  city?: string;
+  unit?: string;
+  raw?: boolean;
 }
 
 export interface CopilotContextReport {
@@ -51,12 +55,16 @@ export interface CopilotContextReport {
     issues: string[];
     warnings: string[];
   };
-  gaps: string[];
-  context?: Record<string, unknown>;
+  gaps: CoverageGap[];
+  brief?: DecisionBrief;
+  detail?: Record<string, unknown>;
   artifacts?: {
     visibleMap?: {
       path: string;
       tiles: number;
+    };
+    raw?: {
+      path: string;
     };
   };
   mapViews?: MapView[];
@@ -83,7 +91,6 @@ const MODULE_TO_KEYS: Record<string, string[]> = {
 };
 
 const KNOWN_MODULES = Object.keys(MODULE_TO_KEYS);
-const DOMAIN_MODULES = new Set(["governors", "trade", "cityStates"]);
 
 export async function runCopilotContext(options: CopilotContextOptions = {}): Promise<CopilotContextReport> {
   const modules = normalizeModules(options.modules);
@@ -156,19 +163,29 @@ export async function runCopilotContext(options: CopilotContextOptions = {}): Pr
     ]);
   }
 
-  const unknown = modules.filter((name) => !KNOWN_MODULES.includes(name));
   const mapSpecs = options.mapSpecs ?? [];
-  const selected = (modules.length > 0 ? modules.filter((name) => KNOWN_MODULES.includes(name)) : modulesInSnapshot(snapshot))
-    .filter((name) => mapSpecs.length === 0 || name !== "visibleMap" || modules.includes("visibleMap"));
-  const context = projectSnapshot(snapshot, selected);
-  const gaps = [
-    ...selected.flatMap((name) => unavailableGap(snapshot, name)),
-    ...unknown.map((name) => `未知模块 ${name}，未列入本次上下文。`),
-    ...selected.filter((name) => !moduleInExport(snapshot, name)).map((name) => `${name} 不在这次导出中。`)
-  ];
-
+  const decision = buildDecisionBrief(snapshot);
+  const gaps = [...decision.gaps];
+  if (modules.length > 0) {
+    gaps.push({
+      kind: "partial",
+      subject: "module",
+      effect: "原始模块不再放入上下文。使用简报、--city、--unit 或 --map。"
+    });
+  }
+  const detail: Record<string, unknown> = {};
+  if (options.city) {
+    const expanded = expandCity(snapshot, options.city);
+    if (expanded.gap) gaps.push(expanded.gap);
+    if (expanded.detail) detail.city = expanded.detail;
+  }
+  if (options.unit) {
+    const expanded = expandUnit(snapshot, options.unit);
+    if (expanded.gap) gaps.push(expanded.gap);
+    if (expanded.detail) detail.unit = expanded.detail;
+  }
   if (options.adjacentUnits) {
-    context.adjacentUnits = adjacentOwnUnits(snapshot);
+    detail.adjacentUnits = adjacentOwnUnits(snapshot);
   }
 
   let mapViews: MapView[] | undefined;
@@ -176,16 +193,23 @@ export async function runCopilotContext(options: CopilotContextOptions = {}): Pr
     const exportId = text(snapshot.source?.exportId) ?? "current";
     const built = await buildMapViews(snapshot, mapSpecs, path.join(paths.snapshotDir, "map-views", exportId.replace(/[^\w.-]+/g, "_")));
     mapViews = built.views;
-    gaps.push(...built.gaps);
+    gaps.push(...built.gaps.map((effect) => ({ kind: "partial" as const, subject: "map", effect })));
   }
 
   let artifacts: CopilotContextReport["artifacts"];
   const warnings = [...manifest.warnings];
+  if (options.raw) {
+    const exportId = (text(snapshot.source?.exportId) ?? "current").replace(/[^\w.-]+/g, "_");
+    const rawPath = path.join(paths.snapshotDir, "raw", `${exportId}.json`);
+    await mkdir(path.dirname(rawPath), { recursive: true });
+    await writeFile(rawPath, snapshotText, "utf8");
+    artifacts = { raw: { path: rawPath } };
+  }
   if (options.renderMapPath) {
     try {
       await mkdir(path.dirname(options.renderMapPath), { recursive: true });
       const rendered = await renderSnapshotMapToFile(latestPath, options.renderMapPath);
-      artifacts = { visibleMap: { path: options.renderMapPath, tiles: rendered.counts.tiles } };
+      artifacts = { ...artifacts, visibleMap: { path: options.renderMapPath, tiles: rendered.counts.tiles } };
     } catch (error) {
       warnings.push(`visible-map.svg 渲染失败：${(error as Error).message}`);
     }
@@ -198,37 +222,17 @@ export async function runCopilotContext(options: CopilotContextOptions = {}): Pr
     exitCode: 0,
     generatedAt: new Date().toISOString(),
     query: options.question,
-    modules: selected,
+    modules: modulesInSnapshot(snapshot),
     identity: identityOf(snapshot),
     refresh: compactRefresh(refresh),
     diagnostics: { issues: [], warnings },
     gaps,
-    context,
+    brief: decision.brief,
+    detail: Object.keys(detail).length > 0 ? detail : undefined,
     artifacts,
     mapViews,
     userActions: []
   };
-}
-
-function projectSnapshot(snapshot: Record<string, any>, modules: string[]): Record<string, unknown> {
-  const keys = new Set<string>(["schemaVersion", "exportedAt", "source", "session", "localPlayer"]);
-  for (const moduleName of modules) {
-    for (const key of MODULE_TO_KEYS[moduleName] ?? []) keys.add(key);
-  }
-  const projected: Record<string, unknown> = {};
-  for (const key of keys) {
-    if (snapshot[key] !== undefined) projected[key] = snapshot[key];
-  }
-  if (snapshot.moduleStatus && typeof snapshot.moduleStatus === "object") {
-    const relevant = new Set(modules);
-    projected.moduleStatus = Object.fromEntries(
-      Object.entries(snapshot.moduleStatus).filter(([name]) => relevant.has(name))
-    );
-  }
-  if (Array.isArray(snapshot.modules)) {
-    projected.modules = snapshot.modules.filter((name: string) => modules.includes(name));
-  }
-  return projected;
 }
 
 function modulesInSnapshot(snapshot: Record<string, any>): string[] {
@@ -240,14 +244,6 @@ function modulesInSnapshot(snapshot: Record<string, any>): string[] {
 function moduleInExport(snapshot: Record<string, any>, moduleName: string): boolean {
   if (Array.isArray(snapshot.modules) && snapshot.modules.includes(moduleName)) return true;
   return (MODULE_TO_KEYS[moduleName] ?? []).some((key) => snapshot[key] !== undefined);
-}
-
-function unavailableGap(snapshot: Record<string, any>, moduleName: string): string[] {
-  if (!DOMAIN_MODULES.has(moduleName)) return [];
-  const field = MODULE_TO_KEYS[moduleName]?.[0];
-  const value = field ? snapshot[field] : undefined;
-  if (!value || typeof value !== "object" || (value as { availability?: unknown }).availability !== "unavailable") return [];
-  return [`${moduleName} 本次不可用，不能当成没有该对象。`];
 }
 
 function incomplete(
