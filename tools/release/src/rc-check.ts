@@ -254,6 +254,7 @@ async function checkBridgeDoctorPreflightAndSummary(options: {
 }): Promise<RcGate> {
   const snapshot = JSON.parse(await readFile(options.fixturePath, "utf8"));
   snapshot.exportedAt = new Date().toISOString();
+  for (const status of Object.values(snapshot.moduleStatus) as { capturedAt: string }[]) status.capturedAt = snapshot.exportedAt;
   const fakeLogLines = [
     "[Civ6] unrelated log line before export",
     `${COPILOT_LOADED} version=${VERSION}`,
@@ -261,9 +262,7 @@ async function checkBridgeDoctorPreflightAndSummary(options: {
       modVersion: VERSION,
       protocolVersion: PROTOCOL_VERSION,
       reason: "loaded",
-      hasBitlib: true,
       base64SelfTest: true,
-      sha256SelfTest: true,
       hasControls: true,
       hasGame: true,
       hasPlayers: true,

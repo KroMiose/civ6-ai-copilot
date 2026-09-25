@@ -19,21 +19,20 @@
     "resources",
     "diplomacy",
     "attention",
-    "confidence"
+    "confidence",
+    "moduleStatus",
+    "selection",
+    "governors",
+    "trade",
+    "cityStates"
   ],
   "additionalProperties": false,
   "properties": {
-    "schemaVersion": {
-      "type": "string",
-      "const": "0.1.0"
-    },
-    "exportedAt": {
-      "type": "string",
-      "format": "date-time"
-    },
+    "schemaVersion": { "type": "string", "const": "0.3.0" },
+    "exportedAt": { "type": "string", "format": "date-time" },
     "source": {
       "type": "object",
-      "required": ["modId", "modVersion", "compatVersion", "transport", "visibilityMode"],
+      "required": ["modId", "modVersion", "compatVersion", "transport", "visibilityMode", "protocolVersion", "exportId"],
       "additionalProperties": false,
       "properties": {
         "modId": { "type": "string", "const": "civ6-ai-copilot" },
@@ -42,15 +41,13 @@
         "transport": { "type": "string", "enum": ["lua-log"] },
         "visibilityMode": { "type": "string", "const": "player-visible" },
         "exportId": { "type": "string" },
-        "exportType": {
-          "type": "string",
-          "enum": ["turn", "full", "modules", "map-window", "visible-map", "diagnostic"]
-        }
+        "exportType": { "type": "string", "enum": ["turn", "full", "modules", "map-window", "visible-map", "diagnostic"] },
+        "protocolVersion": { "type": "string", "const": "0.3.0" }
       }
     },
     "session": {
       "type": "object",
-      "required": ["sessionId", "gameTurn", "ruleset", "gameSpeed", "mapSize", "isMultiplayer"],
+      "required": ["sessionId", "gameTurn", "ruleset", "gameSpeed", "mapSize", "isMultiplayer", "idScope"],
       "additionalProperties": false,
       "properties": {
         "sessionId": { "type": "string", "minLength": 1 },
@@ -58,31 +55,17 @@
         "ruleset": { "type": "string" },
         "gameSpeed": { "type": "string" },
         "mapSize": { "type": "string" },
-        "isMultiplayer": { "type": "boolean" }
+        "isMultiplayer": { "type": "boolean" },
+        "idScope": { "type": "string", "enum": ["load"] }
       }
     },
     "localPlayer": { "$ref": "#/$defs/playerSummary" },
     "modules": {
       "type": "array",
-      "items": {
-        "type": "string",
-        "enum": [
-          "meta",
-          "localPlayer",
-          "cities",
-          "units",
-          "techs",
-          "civics",
-          "government",
-          "policies",
-          "resources",
-          "diplomacyPublic",
-          "visibleMap",
-          "notifications"
-        ]
-      },
+      "items": { "type": "string", "enum": ["meta", "localPlayer", "selection", "cities", "units", "governors", "trade", "cityStates", "techs", "civics", "government", "policies", "resources", "diplomacyPublic", "visibleMap", "economy"] },
       "uniqueItems": true
     },
+    "selection": { "$ref": "#/$defs/selection" },
     "cities": {
       "type": "array",
       "items": { "$ref": "#/$defs/city" }
@@ -91,6 +74,9 @@
       "type": "array",
       "items": { "$ref": "#/$defs/unit" }
     },
+    "governors": { "$ref": "#/$defs/governors" },
+    "trade": { "$ref": "#/$defs/trade" },
+    "cityStates": { "$ref": "#/$defs/cityStates" },
     "visibleMap": {
       "type": "object",
       "required": ["source", "visibility", "confidence", "tiles"],
@@ -138,7 +124,21 @@
           "type": "array",
           "items": { "$ref": "#/$defs/namedType" }
         },
-        "canChangePolicies": { "type": "boolean" }
+        "canChangePolicies": { "type": "boolean" },
+        "availablePolicies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "type": "string" },
+              "name": { "type": "string" },
+              "slotType": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        }
       }
     },
     "resources": {
@@ -216,24 +216,45 @@
         "overall": { "$ref": "#/$defs/confidenceKind" }
       }
     },
-    "extensions": {
+    "extensions": { "type": "object", "additionalProperties": true },
+    "moduleStatus": {
       "type": "object",
-      "additionalProperties": true
+      "propertyNames": { "enum": ["meta", "localPlayer", "selection", "cities", "units", "governors", "trade", "cityStates", "techs", "civics", "government", "policies", "resources", "diplomacyPublic", "visibleMap", "economy"] },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["capturedTurn", "capturedAt", "exportId"],
+        "properties": {
+          "capturedTurn": { "type": "integer", "minimum": 0 },
+          "capturedAt": { "type": "string", "format": "date-time" },
+          "exportId": { "type": "string", "minLength": 1 },
+          "scope": { "type": "string", "enum": ["own-only", "own-and-visible"] }
+        }
+      }
+    },
+    "economy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "visibility", "confidence"],
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "const": "own", "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "sciencePerTurn": { "type": "number" },
+        "culturePerTurn": { "type": "number" },
+        "faithPerTurn": { "type": "number" },
+        "goldPerTurn": { "type": "number" },
+        "goldBalance": { "type": "number" },
+        "faithBalance": { "type": "number" },
+        "goldIncomePerTurn": { "type": "number" },
+        "goldMaintenancePerTurn": { "type": "number" }
+      }
     }
   },
   "$defs": {
-    "sourceKind": {
-      "type": "string",
-      "enum": ["lua-api", "ui-derived", "gameinfo-static", "inferred", "fixture"]
-    },
-    "visibilityKind": {
-      "type": "string",
-      "enum": ["own", "visible-now", "revealed", "public-known", "player-visible"]
-    },
-    "confidenceKind": {
-      "type": "string",
-      "enum": ["confirmed", "inferred", "low"]
-    },
+    "sourceKind": { "type": "string", "enum": ["lua-api", "ui-derived", "gameinfo-static", "inferred", "fixture"] },
+    "visibilityKind": { "type": "string", "enum": ["own", "visible-now", "revealed", "public-known", "player-visible"] },
+    "confidenceKind": { "type": "string", "enum": ["confirmed", "inferred", "low"] },
     "namedType": {
       "type": "object",
       "required": ["type"],
@@ -243,24 +264,25 @@
         "name": { "type": "string" }
       }
     },
+    "districtFact": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string" },
+        "name": { "type": "string" },
+        "isBuilt": { "type": "boolean" }
+      }
+    },
     "playerSummary": {
       "type": "object",
-      "required": [
-        "source",
-        "visibility",
-        "confidence",
-        "localPlayerId",
-        "localPlayerNameHash",
-        "civilizationType",
-        "leaderType"
-      ],
+      "required": ["source", "visibility", "confidence", "localPlayerId", "civilizationType", "leaderType"],
       "additionalProperties": false,
       "properties": {
         "source": { "$ref": "#/$defs/sourceKind" },
         "visibility": { "$ref": "#/$defs/visibilityKind" },
         "confidence": { "$ref": "#/$defs/confidenceKind" },
         "localPlayerId": { "type": "integer", "minimum": 0 },
-        "localPlayerNameHash": { "type": "string" },
         "civilizationType": { "type": "string" },
         "leaderType": { "type": "string" },
         "isHuman": { "type": "boolean" }
@@ -285,7 +307,22 @@
         "yields": {
           "type": "object",
           "additionalProperties": { "type": "number" }
-        }
+        },
+        "housing": { "type": "number" },
+        "amenities": { "type": "number" },
+        "amenitiesNeeded": { "type": "number" },
+        "turnsUntilGrowth": { "type": "integer", "minimum": 0 },
+        "turnsUntilStarvation": { "type": "integer", "minimum": 0 },
+        "buildings": { "type": "array", "items": { "$ref": "#/$defs/namedType" } },
+        "districts": { "type": "array", "items": { "$ref": "#/$defs/districtFact" } },
+        "populationLimitedDistrictsUsed": { "type": "integer", "minimum": 0 },
+        "populationLimitedDistrictsCapacity": { "type": "integer", "minimum": 0 },
+        "currentProductionProgress": { "type": "number", "minimum": 0 },
+        "currentProductionCost": { "type": "number", "minimum": 0 },
+        "foodStock": { "type": "number", "minimum": 0 },
+        "foodSurplus": { "type": "number" },
+        "growthThreshold": { "type": "number", "minimum": 0 },
+        "underSiege": { "type": "boolean" }
       }
     },
     "unit": {
@@ -304,7 +341,19 @@
         "y": { "type": "integer" },
         "damage": { "type": "integer", "minimum": 0 },
         "movesRemaining": { "type": "number", "minimum": 0 },
-        "formationClass": { "type": "string" }
+        "formationClass": { "type": "string" },
+        "combatStrength": { "type": "number", "minimum": 0 },
+        "rangedStrength": { "type": "number", "minimum": 0 },
+        "bombardStrength": { "type": "number", "minimum": 0 },
+        "range": { "type": "number", "minimum": 0 },
+        "maxMoves": { "type": "number", "minimum": 0 },
+        "buildCharges": { "type": "integer", "minimum": 0 },
+        "experience": { "type": "number", "minimum": 0 },
+        "experienceForNextLevel": { "type": "number", "minimum": 0 },
+        "level": { "type": "integer", "minimum": 0 },
+        "promotions": { "type": "array", "items": { "$ref": "#/$defs/namedType" } },
+        "militaryFormation": { "type": "string", "enum": ["standard", "corps", "army"] },
+        "upgradeCost": { "type": "number", "minimum": 0 }
       }
     },
     "tile": {
@@ -386,6 +435,160 @@
               "type": { "type": "string" },
               "boosted": { "type": "boolean" },
               "confidence": { "$ref": "#/$defs/confidenceKind" }
+            }
+          }
+        },
+        "currentProgress": { "type": "number", "minimum": 0 },
+        "currentCost": { "type": "number", "minimum": 0 }
+      }
+    },
+    "availability": { "type": "string", "enum": ["available", "not-applicable", "unavailable"] },
+    "selection": {
+      "type": "object",
+      "required": ["source", "visibility", "confidence", "city", "unit"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "const": "own", "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "city": { "$ref": "#/$defs/selectionEntity" },
+        "unit": { "$ref": "#/$defs/selectionEntity" }
+      }
+    },
+    "selectionEntity": {
+      "type": "object",
+      "required": ["status", "id"],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "status": { "const": "selected" },
+            "id": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "properties": {
+            "status": { "enum": ["none", "unsupported", "error"] },
+            "id": { "type": "null" }
+          }
+        }
+      ],
+      "properties": {
+        "status": { "type": "string", "enum": ["selected", "none", "unsupported", "error"] },
+        "id": { "type": ["string", "null"] }
+      }
+    },
+    "governors": {
+      "type": "object",
+      "required": ["source", "visibility", "confidence", "availability"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "const": "player-visible", "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "availability": { "$ref": "#/$defs/availability" },
+        "titlesAvailable": { "type": "integer", "minimum": 0 },
+        "titlesSpent": { "type": "integer", "minimum": 0 },
+        "canAppoint": { "type": "boolean" },
+        "governors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["type"],
+            "additionalProperties": false,
+            "properties": {
+              "type": { "type": "string" },
+              "name": { "type": "string" },
+              "title": { "type": "string" },
+              "appointed": { "type": "boolean" },
+              "assigned": { "type": "boolean" },
+              "assignedCityId": { "type": "string" },
+              "assignedCityName": { "type": "string" },
+              "established": { "type": "boolean" },
+              "turnsToEstablish": { "type": "integer", "minimum": 0 },
+              "turnsUntilEstablished": { "type": "integer", "minimum": 0 },
+              "neutralizedTurns": { "type": "integer", "minimum": 0 },
+              "status": { "type": "string", "enum": ["needs-assignment", "transitioning", "established", "neutralized"] },
+              "promotions": { "type": "array", "items": { "$ref": "#/$defs/namedType" } }
+            }
+          }
+        }
+      }
+    },
+    "trade": {
+      "type": "object",
+      "required": ["source", "visibility", "confidence", "availability"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "const": "player-visible", "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "availability": { "$ref": "#/$defs/availability" },
+        "capacity": { "type": "integer", "minimum": 0 },
+        "activeCount": { "type": "integer", "minimum": 0 },
+        "routes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "originCityId": { "type": "string" },
+              "originCityName": { "type": "string" },
+              "destinationCityId": { "type": "string" },
+              "destinationCityName": { "type": "string" },
+              "turnsRemaining": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "cityStates": {
+      "type": "object",
+      "required": ["source", "visibility", "confidence", "availability"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "$ref": "#/$defs/sourceKind" },
+        "visibility": { "const": "player-visible", "type": "string" },
+        "confidence": { "$ref": "#/$defs/confidenceKind" },
+        "availability": { "$ref": "#/$defs/availability" },
+        "availableEnvoys": { "type": "integer", "minimum": 0 },
+        "cityStates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["playerId", "type"],
+            "additionalProperties": false,
+            "properties": {
+              "playerId": { "type": "integer", "minimum": 0 },
+              "type": { "type": "string" },
+              "name": { "type": "string" },
+              "envoys": { "type": "integer", "minimum": 0 },
+              "isSuzerain": { "type": "boolean" },
+              "rewards": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "oneEnvoy": { "type": "string" },
+                  "threeEnvoys": { "type": "string" },
+                  "sixEnvoys": { "type": "string" },
+                  "suzerain": { "type": "string" }
+                }
+              },
+              "quests": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["type"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "type": { "type": "string" },
+                    "name": { "type": "string" },
+                    "description": { "type": "string" },
+                    "turnsRemaining": { "type": "integer", "minimum": 0 },
+                    "reward": { "type": "string" }
+                  }
+                }
+              }
             }
           }
         }

@@ -23,6 +23,7 @@ test("mod package validator accepts the repository mod source", async () => {
   assert.equal(validation.files.includes("civ6-ai-copilot.modinfo"), true);
   assert.equal(validation.files.includes("thumbnail.png"), true);
   assert.equal(validation.files.includes("ui/civ6_ai_copilot.lua"), true);
+  assert.equal(validation.files.includes("ui/civ6_ai_copilot_decision_data.lua"), true);
   assert.equal(validation.files.includes("ui/civ6_ai_copilot.xml"), true);
   assert.equal(validation.files.includes("text/civ6-ai-copilot-text.xml"), true);
 });
@@ -35,6 +36,7 @@ test("mod installer creates Civ6-compatible top-level mod folder", async () => {
     assert.equal(path.basename(result.targetDir), MOD_FOLDER_NAME);
     await stat(path.join(result.targetDir, "civ6-ai-copilot.modinfo"));
     await stat(path.join(result.targetDir, "ui", "civ6_ai_copilot.lua"));
+    await stat(path.join(result.targetDir, "ui", "civ6_ai_copilot_decision_data.lua"));
     await stat(path.join(result.targetDir, "ui", "civ6_ai_copilot.xml"));
   } finally {
     await rm(tempDir, { recursive: true, force: true });
@@ -61,10 +63,15 @@ test("mod package command creates manifest and release folder", async () => {
     assert.equal(manifest.files.some((file: { path: string }) => file.path === "civ6-ai-copilot.modinfo"), true);
     assert.equal(manifest.files.some((file: { path: string }) => file.path === "thumbnail.png"), true);
     assert.equal(manifest.files.some((file: { path: string }) => file.path === "text/civ6-ai-copilot-text.xml"), true);
+    assert.equal(manifest.files.some((file: { path: string }) => file.path === "ui/civ6_ai_copilot_decision_data.lua"), true);
     assert.equal(manifest.files.some((file: { path: string }) => file.path === PACKAGE_CHECKLIST_FILE), true);
     assert.equal(manifest.files.every((file: { sha256: string; sizeBytes: number }) => /^[a-f0-9]{64}$/.test(file.sha256) && file.sizeBytes > 0), true);
 
     await stat(path.join(result.packageDir, PACKAGE_CHECKLIST_FILE));
+    const checklist = await readFile(path.join(result.packageDir, PACKAGE_CHECKLIST_FILE), "utf8");
+    assert.match(checklist, /更新战情/);
+    assert.doesNotMatch(checklist, /汇总本回合|更新地图情报|lightweight/);
+    assert.match(checklist, /每回合自动更新/);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -94,7 +101,7 @@ test("mod validator rejects UI context packages without paired Lua files", async
     const modInfo = await readFile(modInfoPath, "utf8");
     await writeFile(
       modInfoPath,
-      modInfo.replace("    <File>ui/civ6_ai_copilot.lua</File>\n", ""),
+      modInfo.replace(/    <File>ui\/civ6_ai_copilot.lua<\/File>\r?\n/, ""),
       "utf8"
     );
 
@@ -115,7 +122,7 @@ test("mod validator rejects UI contexts whose paired Lua is not imported for the
     const modInfo = await readFile(modInfoPath, "utf8");
     await writeFile(
       modInfoPath,
-      modInfo.replace(/    <ImportFiles id="CIV6_AI_COPILOT_FILES">[\s\S]*?    <\/ImportFiles>\n/, ""),
+      modInfo.replace(/    <ImportFiles id="CIV6_AI_COPILOT_FILES">[\s\S]*?    <\/ImportFiles>\r?\n/, ""),
       "utf8"
     );
 
@@ -290,31 +297,72 @@ test("mod validator rejects Copilot Lua without optional auto turn sync diagnost
   }
 });
 
-test("mod validator rejects UI contexts without a visible XML-loaded Lua-pending diagnostic", async () => {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-bad-ui-diagnostic-"));
+test("mod validator rejects a missing translation for a player-visible status", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-missing-status-text-"));
   try {
     const badModDir = path.join(tempDir, "mod");
     await cp(sourceDir, badModDir, { recursive: true });
-    const uiPath = path.join(badModDir, "ui", "civ6_ai_copilot.xml");
-    const uiXml = await readFile(uiPath, "utf8");
-    await writeFile(
-      uiPath,
-      uiXml
-        .replace(/\n\s*<Label ID="XmlLoadedLabel"[^>]*\/>/, "")
-        .replace(/ID="StatusLabel"([^>]*)String="[^"]+"/, 'ID="StatusLabel"$1String="LOC_CIV6_AI_COPILOT_STATUS_READY"'),
-      "utf8"
-    );
-
+    const textPath = path.join(badModDir, "text", "civ6-ai-copilot-text.xml");
+    const xml = await readFile(textPath, "utf8");
+    const missingText = xml.replace(/<Replace Tag="LOC_CIV6_AI_COPILOT_STATUS_UPDATING" Language="zh_Hans_CN">[\s\S]*?<\/Replace>/, "");
+    assert.notEqual(missingText, xml);
+    await writeFile(textPath, missingText, "utf8");
     const validation = await validateModSource(badModDir);
     assert.equal(validation.ok, false);
-    assert.equal(
-      validation.issues.some((issue) => issue.includes("XML-loaded Lua-pending diagnostic")),
-      true
-    );
+    assert.ok(validation.issues.includes("text/civ6-ai-copilot-text.xml is missing zh_Hans_CN translation for LOC_CIV6_AI_COPILOT_STATUS_UPDATING"));
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("mod validator rejects automatic updates that omit the full briefing map", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-bad-auto-scope-"));
+  try {
+    const badModDir = path.join(tempDir, "mod");
+    await cp(sourceDir, badModDir, { recursive: true });
+    const luaPath = path.join(badModDir, "ui", "civ6_ai_copilot.lua");
+    const lua = await readFile(luaPath, "utf8");
+    const reducedScope = lua.replace(
+      'startSyncJob("full", withCoreModules(FULL_BRIEF_MODULES), "auto-turn"',
+      'startSyncJob("turn", withCoreModules(TURN_BRIEF_MODULES), "auto-turn"'
+    );
+    assert.notEqual(reducedScope, lua);
+    await writeFile(luaPath, reducedScope, "utf8");
+    const validation = await validateModSource(badModDir);
+    assert.equal(validation.ok, false);
+    assert.ok(validation.issues.some((issue) => issue.includes("through the full briefing job")));
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+for (const diagnosticState of ["missing", "hidden"] as const) {
+  test(`mod validator rejects a ${diagnosticState} XML-loaded Lua-pending diagnostic`, async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-bad-ui-diagnostic-"));
+    try {
+      const badModDir = path.join(tempDir, "mod");
+      await cp(sourceDir, badModDir, { recursive: true });
+      const uiPath = path.join(badModDir, "ui", "civ6_ai_copilot.xml");
+      const uiXml = await readFile(uiPath, "utf8");
+      await writeFile(
+        uiPath,
+        diagnosticState === "missing"
+          ? uiXml.replace(/\n\s*<Label ID="XmlLoadedLabel"[^>]*\/>/, "")
+          : uiXml.replace('ID="XmlLoadedLabel"', 'ID="XmlLoadedLabel" Hidden="1"'),
+        "utf8"
+      );
+
+      const validation = await validateModSource(badModDir);
+      assert.equal(validation.ok, false);
+      assert.equal(
+        validation.issues.some((issue) => issue.includes("XML-loaded Lua-pending diagnostic")),
+        true
+      );
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+}
 
 test("mod validator rejects Lua-unsafe UI context filenames", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-bad-ui-name-"));
@@ -440,16 +488,36 @@ test("mod validator rejects Lua control references without matching XML IDs", as
     await cp(sourceDir, badModDir, { recursive: true });
     const uiPath = path.join(badModDir, "ui", "civ6_ai_copilot.xml");
     const uiXml = await readFile(uiPath, "utf8");
-    await writeFile(uiPath, uiXml.replace('ID="SyncGovernmentButton"', 'ID="SyncPolicyButton"'), "utf8");
+    await writeFile(uiPath, uiXml.replace('ID="UpdateBriefButton"', 'ID="SyncTurnButton"'), "utf8");
 
     const validation = await validateModSource(badModDir);
     assert.equal(validation.ok, false);
     assert.equal(
       validation.issues.some((issue) =>
-        issue.includes("ui/civ6_ai_copilot.lua references Controls.SyncGovernmentButton")
+        issue.includes("UpdateBriefButton manual full-refresh action")
       ),
       true
     );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("mod validator rejects topic-specific visible sync buttons in the briefing panel", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-topic-sync-button-"));
+  try {
+    const badModDir = path.join(tempDir, "mod");
+    await cp(sourceDir, badModDir, { recursive: true });
+    const uiPath = path.join(badModDir, "ui", "civ6_ai_copilot.xml");
+    const uiXml = await readFile(uiPath, "utf8");
+    await writeFile(uiPath, uiXml.replace(
+      '<GridButton ID="AutoSyncButton"',
+      '<GridButton ID="SyncMapButton" Size="360,24" Style="ButtonControl" String="Map" />\n          <GridButton ID="AutoSyncButton"'
+    ), "utf8");
+
+    const validation = await validateModSource(badModDir);
+    assert.equal(validation.ok, false);
+    assert.equal(validation.issues.some((issue) => issue.includes("must not expose topic-specific sync buttons")), true);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

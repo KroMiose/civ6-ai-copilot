@@ -32,7 +32,7 @@ npm run mod -- install --clean --mods-dir "<Windows Civ6 Mods dir>"
 npm run smoke:offline -- --output-dir "%TEMP%\civ6-ai-copilot-offline-smoke" --clean
 ```
 
-玩家在 Civ6 的 `Additional Content` 启用 Mod，进入对局，打开战情简报并点击「汇总本回合」。战争、定居、海军和前线问题再点击「更新地图情报」。
+玩家在 Civ6 的 `Additional Content` 启用 Mod，进入对局，打开战情简报并点击「更新战情」完成手动完整刷新。「每回合自动更新」默认关闭；启用后每个本地玩家回合也刷新全部已实现模块和预算限制地图。
 
 生成当前战情与 handoff：
 

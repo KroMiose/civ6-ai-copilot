@@ -226,7 +226,7 @@ function refreshNextActions(refresh: CopilotRefreshReport, paths: Civ6AICopilotP
   const rerun = `npm run copilot -- ${buildCopilotCommandArgs(options)}`;
   if (refresh.mode === "tuner") {
     return [
-      "在 Civ6 左上打开「战情简报」，选择「汇总本回合」或本问题对应的专题情报。",
+      "在 Civ6 左上打开「战情简报」，点击「更新战情」。",
       "面板显示“简报已汇总，可继续由AI副官分析。”后，回到终端重新运行标准入口。",
       rerun
     ];
@@ -234,7 +234,7 @@ function refreshNextActions(refresh: CopilotRefreshReport, paths: Civ6AICopilotP
 
   return [
     `保持 bridge 读取 ${paths.luaLogPath} 并输出到 ${paths.snapshotDir}。`,
-    "在 Civ6 左上打开「战情简报」，选择「汇总本回合」或本问题对应的专题情报。",
+    "在 Civ6 左上打开「战情简报」，点击「更新战情」。",
     "面板显示“简报已汇总，可继续由AI副官分析。”后，重新运行标准入口。",
     rerun
   ];

@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { mergeSnapshotModules, type ModuleSnapshot } from "../../snapshot/src/module-cache.js";
+import { validateSnapshotObject } from "../../snapshot/src/validate.js";
 
 interface SnapshotForPath {
   session?: {
@@ -21,8 +23,19 @@ export interface WrittenSnapshot {
 export async function writeSnapshotOutputs(
   snapshot: unknown,
   outputDir: string,
-  metadata: { exportId: string; checksumSha256: string }
+  metadata: { exportId: string }
 ): Promise<WrittenSnapshot> {
+  let previous: ModuleSnapshot | undefined;
+  try {
+    const candidate = JSON.parse(await readFile(path.join(outputDir, "latest.json"), "utf8"));
+    if ((await validateSnapshotObject(candidate)).ok) previous = candidate;
+  } catch { /* No usable cache: begin with this export. */ }
+  const incomingValid = (await validateSnapshotObject(snapshot)).ok;
+  if (incomingValid) {
+    snapshot = mergeSnapshotModules(previous, snapshot as ModuleSnapshot);
+    const mergedValidation = await validateSnapshotObject(snapshot);
+    if (!mergedValidation.ok) throw new Error(`Module merge failed validation: ${JSON.stringify(mergedValidation)}`);
+  }
   const typed = snapshot as SnapshotForPath;
   const sessionId = sanitizePathPart(String(typed.session?.sessionId ?? "unknown-session"));
   const gameTurn = Number.isInteger(typed.session?.gameTurn) ? String(typed.session?.gameTurn).padStart(4, "0") : "turn";
@@ -47,7 +60,7 @@ export async function writeSnapshotOutputs(
       {
         exportId: metadata.exportId,
         checksumSha256: latestChecksumSha256,
-        transportChecksumSha256: metadata.checksumSha256,
+        checksumScope: "latest-json-file",
         snapshotPath,
         latestPath,
         writtenAt: new Date().toISOString()
@@ -67,5 +80,5 @@ async function atomicWrite(targetPath: string, content: string): Promise<void> {
 }
 
 function sanitizePathPart(value: string): string {
-  return value.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "") || "unknown";
+  return value.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^[._]+|[._]+$/g, "") || "unknown";
 }

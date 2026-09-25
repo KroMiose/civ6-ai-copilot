@@ -226,7 +226,7 @@ export function formatCiv6AICopilotPathsPowerShell(paths: Civ6AICopilotPaths): s
     "",
     "Write-Host ''",
     "Write-Host 'Now start Civilization VI, open Additional Content, enable civ6-ai-copilot, then start or load a real game.' -ForegroundColor Yellow",
-    "Write-Host 'In-game, confirm the Copilot icon button appears in the native left-top LaunchBar, open it, click 汇总本回合, then click at least one supplemental button such as 城市运营 or 科技市政.' -ForegroundColor Yellow",
+    "Write-Host 'In-game, confirm the Copilot icon button appears in the native left-top LaunchBar, open it, then click 更新战情.' -ForegroundColor Yellow",
     "Read-Host 'After the briefing panel says 简报已汇总 and the recent summary updates, press Enter here'",
     "",
     "Write-Host '== Assemble and validate the real Lua.log export ==' -ForegroundColor Cyan",

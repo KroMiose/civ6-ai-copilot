@@ -47,7 +47,6 @@ test("manual evidence draft prefills machine-proven Windows fields without claim
     assert.equal(windowsSmoke.playersApiAvailable, true);
     assert.equal(windowsSmoke.mapApiAvailable, true);
     assert.equal(windowsSmoke.base64SelfTest, true);
-    assert.equal(windowsSmoke.sha256SelfTest, true);
     assert.equal(windowsSmoke.hasPlayerResources, true);
     assert.equal(windowsSmoke.hasPlayerProgression, true);
     assert.equal(windowsSmoke.hasGovernmentPolicies, true);
@@ -166,6 +165,7 @@ test("manual evidence draft can prefill Mac Codex handoff machine checks without
 async function writeBridgeFixture(tempDir: string): Promise<{ luaLogPath: string; snapshotDir: string; latestPath: string }> {
   const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
   snapshot.exportedAt = new Date().toISOString();
+  for (const status of Object.values(snapshot.moduleStatus) as { capturedAt: string }[]) status.capturedAt = snapshot.exportedAt;
   const modulesSnapshot = {
     ...snapshot,
     source: {
@@ -181,9 +181,7 @@ async function writeBridgeFixture(tempDir: string): Promise<{ luaLogPath: string
       modVersion: VERSION,
       protocolVersion: PROTOCOL_VERSION,
       reason: "manual-evidence-draft-test",
-      hasBitlib: true,
       base64SelfTest: true,
-      sha256SelfTest: true,
       hasControls: true,
       hasGame: true,
       hasPlayers: true,

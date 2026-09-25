@@ -1,14 +1,15 @@
 {
-  "schemaVersion": "0.1.0",
+  "schemaVersion": "0.3.0",
   "exportedAt": "2026-07-06T08:00:00.000Z",
   "source": {
     "modId": "civ6-ai-copilot",
-    "modVersion": "0.1.1",
-    "compatVersion": "0.1",
+    "modVersion": "0.3.1",
+    "compatVersion": "0.3",
     "transport": "lua-log",
     "visibilityMode": "player-visible",
     "exportId": "fixture-export-0001",
-    "exportType": "turn"
+    "exportType": "turn",
+    "protocolVersion": "0.3.0"
   },
   "session": {
     "sessionId": "fixture-session",
@@ -16,14 +17,14 @@
     "ruleset": "RULESET_EXPANSION_2",
     "gameSpeed": "GAMESPEED_ONLINE",
     "mapSize": "MAPSIZE_SMALL",
-    "isMultiplayer": true
+    "isMultiplayer": true,
+    "idScope": "load"
   },
   "localPlayer": {
     "source": "fixture",
     "visibility": "own",
     "confidence": "confirmed",
     "localPlayerId": 0,
-    "localPlayerNameHash": "sha256:fixture-local-player",
     "civilizationType": "CIVILIZATION_BABYLON_STK",
     "leaderType": "LEADER_HAMMURABI",
     "isHuman": true
@@ -31,16 +32,28 @@
   "modules": [
     "meta",
     "localPlayer",
+    "selection",
     "cities",
     "units",
+    "governors",
+    "trade",
+    "cityStates",
     "techs",
     "civics",
     "government",
     "policies",
     "resources",
     "diplomacyPublic",
-    "visibleMap"
+    "visibleMap",
+    "economy"
   ],
+  "selection": {
+    "source": "fixture",
+    "visibility": "own",
+    "confidence": "confirmed",
+    "city": { "status": "none", "id": null },
+    "unit": { "status": "none", "id": null }
+  },
   "cities": [
     {
       "source": "fixture",
@@ -58,12 +71,27 @@
       },
       "turnsUntilComplete": 3,
       "yields": {
-        "food": 10,
-        "production": 8,
-        "science": 12,
-        "culture": 5,
-        "gold": 9
-      }
+        "YIELD_FOOD": 10,
+        "YIELD_PRODUCTION": 8,
+        "YIELD_SCIENCE": 12,
+        "YIELD_CULTURE": 5,
+        "YIELD_GOLD": 9,
+        "YIELD_FAITH": 2
+      },
+      "housing": 6,
+      "amenities": 2,
+      "amenitiesNeeded": 2,
+      "turnsUntilGrowth": 4,
+      "buildings": [{ "type": "BUILDING_MONUMENT", "name": "Monument" }],
+      "districts": [{ "type": "DISTRICT_CITY_CENTER", "name": "City Center", "isBuilt": true }],
+      "populationLimitedDistrictsUsed": 1,
+      "populationLimitedDistrictsCapacity": 2,
+      "currentProductionProgress": 35,
+      "currentProductionCost": 80,
+      "foodStock": 14,
+      "foodSurplus": 3,
+      "growthThreshold": 24,
+      "underSiege": false
     }
   ],
   "units": [
@@ -79,7 +107,19 @@
       "y": 18,
       "damage": 0,
       "movesRemaining": 1,
-      "formationClass": "FORMATION_CLASS_LAND_COMBAT"
+      "formationClass": "FORMATION_CLASS_LAND_COMBAT",
+      "combatStrength": 15,
+      "rangedStrength": 25,
+      "bombardStrength": 0,
+      "range": 2,
+      "maxMoves": 2,
+      "buildCharges": 0,
+      "experience": 7,
+      "experienceForNextLevel": 15,
+      "level": 2,
+      "promotions": [{ "type": "PROMOTION_VOLLEY", "name": "Volley" }],
+      "militaryFormation": "standard",
+      "upgradeCost": 60
     },
     {
       "source": "fixture",
@@ -92,10 +132,54 @@
       "x": 15,
       "y": 18,
       "damage": 20,
-      "movesRemaining": 0,
       "formationClass": "FORMATION_CLASS_LAND_COMBAT"
     }
   ],
+  "governors": {
+    "source": "fixture",
+    "visibility": "player-visible",
+    "confidence": "confirmed",
+    "availability": "available",
+    "titlesAvailable": 1,
+    "titlesSpent": 1,
+    "canAppoint": false,
+    "governors": [{
+      "type": "GOVERNOR_MAGNUS",
+      "name": "Magnus",
+      "appointed": true,
+      "assigned": true,
+      "assignedCityId": "city-0-100",
+      "assignedCityName": "Capital",
+      "established": true,
+      "status": "established",
+      "promotions": [{ "type": "GOVERNOR_PROMOTION_GROUNDBREAKER", "name": "Groundbreaker" }]
+    }]
+  },
+  "trade": {
+    "source": "fixture",
+    "visibility": "player-visible",
+    "confidence": "confirmed",
+    "availability": "available",
+    "capacity": 2,
+    "activeCount": 1,
+    "routes": [{ "originCityId": "city-0-100", "originCityName": "Capital", "destinationCityId": "city-0-100", "destinationCityName": "Capital", "turnsRemaining": 5 }]
+  },
+  "cityStates": {
+    "source": "fixture",
+    "visibility": "player-visible",
+    "confidence": "confirmed",
+    "availability": "available",
+    "availableEnvoys": 1,
+    "cityStates": [{
+      "playerId": 12,
+      "type": "CIVILIZATION_GENEVA",
+      "name": "Geneva",
+      "envoys": 1,
+      "isSuzerain": false,
+      "rewards": { "oneEnvoy": "Science bonus" },
+      "quests": [{ "type": "QUEST_SEND_TRADE_ROUTE", "name": "Send a trade route", "turnsRemaining": 3, "reward": "Envoy" }]
+    }]
+  },
   "visibleMap": {
     "source": "fixture",
     "visibility": "player-visible",
@@ -118,7 +202,9 @@
         "terrainType": "TERRAIN_GRASS",
         "isFreshWater": true,
         "isRiver": true,
-        "riverEdges": ["W"],
+        "riverEdges": [
+          "W"
+        ],
         "appeal": 1,
         "yields": {
           "YIELD_FOOD": 2,
@@ -147,7 +233,9 @@
           "YIELD_FOOD": 1,
           "YIELD_PRODUCTION": 1
         },
-        "unitIds": ["unit-1-300"]
+        "unitIds": [
+          "unit-1-300"
+        ]
       }
     ]
   },
@@ -177,7 +265,9 @@
         "boosted": false,
         "confidence": "confirmed"
       }
-    ]
+    ],
+    "currentProgress": 20,
+    "currentCost": 50
   },
   "civics": {
     "source": "fixture",
@@ -198,7 +288,9 @@
         "type": "CIVIC_MILITARY_TRADITION",
         "name": "Military Tradition"
       }
-    ]
+    ],
+    "currentProgress": 30,
+    "currentCost": 100
   },
   "government": {
     "source": "fixture",
@@ -222,7 +314,15 @@
         "name": "Urban Planning"
       }
     ],
-    "canChangePolicies": false
+    "canChangePolicies": false,
+    "availablePolicies": [
+      {
+        "type": "POLICY_DISCIPLINE",
+        "name": "Discipline",
+        "slotType": "SLOT_MILITARY",
+        "description": "Fixture policy effect (synthetic)."
+      }
+    ]
   },
   "resources": {
     "source": "fixture",
@@ -265,5 +365,101 @@
   ],
   "confidence": {
     "overall": "confirmed"
+  },
+  "moduleStatus": {
+    "meta": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "localPlayer": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "selection": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "cities": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "units": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001",
+      "scope": "own-and-visible"
+    },
+    "governors": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "trade": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "cityStates": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "techs": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "civics": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "government": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "policies": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "resources": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "diplomacyPublic": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "visibleMap": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    },
+    "economy": {
+      "capturedTurn": 42,
+      "capturedAt": "2026-07-06T08:00:00.000Z",
+      "exportId": "fixture-export-0001"
+    }
+  },
+  "economy": {
+    "source": "fixture",
+    "visibility": "own",
+    "confidence": "confirmed",
+    "goldBalance": 100,
+    "goldPerTurn": 9,
+    "faithPerTurn": 2,
+    "sciencePerTurn": 12,
+    "culturePerTurn": 5,
+    "faithBalance": 20,
+    "goldIncomePerTurn": 12,
+    "goldMaintenancePerTurn": 3
   }
 }

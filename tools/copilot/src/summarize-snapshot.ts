@@ -23,7 +23,7 @@ export interface SnapshotSummary {
     isMultiplayer: boolean;
   };
   localPlayer: {
-    localPlayerId: number;
+    localPlayerId: number | undefined;
     civilizationType: string;
     leaderType: string;
     visibility: string;
@@ -31,6 +31,11 @@ export interface SnapshotSummary {
   };
   coverage: {
     availableModules: string[];
+    staleModules: string[];
+    notApplicableModules: string[];
+    unavailableModules: string[];
+    moduleStatus: NonNullable<SnapshotLike["moduleStatus"]>;
+    unitsScope?: "own-only" | "own-and-visible";
     missingRecommendedModules: string[];
     counts: {
       cities: number;
@@ -45,9 +50,14 @@ export interface SnapshotSummary {
   highlights: {
     cities: string[];
     units: string[];
+    selection: string[];
     map: string[];
+    governors: string[];
+    trade: string[];
+    cityStates: string[];
     progression: string[];
     government: string[];
+    economy: string[];
     diplomacy: string[];
     attention: string[];
   };
@@ -58,6 +68,10 @@ export interface SnapshotSummary {
     scenarios: string[];
     requiredModules: string[];
     missingModules: string[];
+    staleModules: string[];
+    unavailableModules: string[];
+    notApplicableModules: string[];
+    limitedModules: string[];
     lowConfidenceModules: string[];
     recommendation: string;
   };
@@ -77,30 +91,38 @@ export class SnapshotSummaryError extends Error {
 const recommendedModules = [
   "meta",
   "localPlayer",
+  "selection",
   "cities",
   "units",
+  "governors",
+  "trade",
+  "cityStates",
   "techs",
   "civics",
   "government",
   "policies",
   "resources",
-  "diplomacyPublic",
-  "visibleMap"
+  "economy",
+  "diplomacyPublic"
 ];
 
 const moduleLabels: Record<string, string> = {
   meta: "元信息",
   localPlayer: "本地玩家",
-  cities: "城市运营",
-  units: "军事态势",
-  techs: "科技市政",
-  civics: "科技市政",
-  government: "政体政策",
-  policies: "政体政策",
-  resources: "资源库存",
+  selection: "当前选择",
+  cities: "城市",
+  units: "单位",
+  governors: "总督",
+  trade: "商路",
+  cityStates: "已遇见城邦",
+  techs: "科技",
+  civics: "市政",
+  government: "政体",
+  policies: "政策",
+  resources: "资源",
+  economy: "经济",
   diplomacyPublic: "公开外交",
-  visibleMap: "更新地图情报",
-  notifications: "通知/待办"
+  visibleMap: "地图"
 };
 
 const terrainLabels: Record<string, string> = {
@@ -196,19 +218,23 @@ const districtLabels: Record<string, string> = {
 const intentRules = [
   {
     id: "war",
-    modules: ["meta", "localPlayer", "cities", "units", "visibleMap", "diplomacyPublic"]
+    modules: ["meta", "localPlayer", "selection", "cities", "units", "visibleMap", "diplomacyPublic"]
   },
   {
     id: "navy",
-    modules: ["meta", "localPlayer", "cities", "units", "visibleMap", "resources", "techs"]
+    modules: ["meta", "localPlayer", "selection", "cities", "units", "visibleMap", "resources", "techs", "trade"]
   },
   {
     id: "exploration",
-    modules: ["meta", "localPlayer", "units", "visibleMap"]
+    modules: ["meta", "localPlayer", "selection", "units", "visibleMap"]
   },
   {
     id: "city-production",
-    modules: ["meta", "localPlayer", "cities", "resources"]
+    modules: ["meta", "localPlayer", "selection", "cities", "resources", "governors", "trade"]
+  },
+  {
+    id: "district-planning",
+    modules: ["meta", "localPlayer", "cities", "visibleMap", "resources"]
   },
   {
     id: "tech-civic",
@@ -216,15 +242,15 @@ const intentRules = [
   },
   {
     id: "policy",
-    modules: ["meta", "localPlayer", "government", "policies", "resources"]
+    modules: ["meta", "localPlayer", "selection", "government", "policies", "resources", "governors"]
   },
   {
     id: "settling",
-    modules: ["meta", "localPlayer", "cities", "units", "visibleMap", "resources"]
+    modules: ["meta", "localPlayer", "selection", "cities", "units", "visibleMap", "resources"]
   },
   {
     id: "turn-priority",
-    modules: ["meta", "localPlayer", "cities", "units", "techs", "civics", "government", "policies", "resources", "diplomacyPublic", "visibleMap"]
+    modules: ["meta", "localPlayer", "selection", "cities", "units", "governors", "trade", "cityStates", "techs", "civics", "government", "policies", "resources", "economy", "diplomacyPublic"]
   }
 ];
 
@@ -232,13 +258,14 @@ const questionRules = [
   { id: "war", patterns: [/战争/, /开战/, /打仗/, /进攻/, /防守/, /前线/, /围城/, /\bwar\b/i, /\battack\b/i, /\bdefen[cs]e\b/i] },
   { id: "navy", patterns: [/海军/, /舰队/, /港口/, /岛/, /海岸/, /\bnavy\b/i, /\bcoast/i] },
   { id: "exploration", patterns: [/探索/, /侦察/, /探路/, /开图/, /探图/, /勇士/, /斥候/, /走哪/, /往哪里/, /\bexplor/i, /\bscout/i] },
-  { id: "city-production", patterns: [/城市/, /建造/, /生产/, /区域/, /住房/, /宜居度/, /\bcit(y|ies)\b/i, /\bproduction\b/i] },
+  { id: "district-planning", patterns: [/区域/, /选址/, /district.?planning/i] },
+  { id: "city-production", patterns: [/城市/, /建造/, /生产/, /住房/, /宜居度/, /\bcit(y|ies)\b/i, /\bproduction\b/i] },
   { id: "tech-civic", patterns: [/科技/, /市政/, /尤里卡/, /鼓舞/, /路线/, /\btech\b/i, /\bcivic\b/i, /\beureka\b/i] },
   { id: "policy", patterns: [/政策/, /政体/, /换卡/, /卡槽/, /\bpolicy\b/i, /\bgovernment\b/i] },
   { id: "settling", patterns: [/铺城/, /定居/, /移民/, /坐城/, /资源岛/, /\bsettle\b/i, /\bsettler\b/i] }
 ];
 
-const defaultQuestionModules = ["meta", "localPlayer", "cities", "units", "techs", "civics", "government", "policies", "resources"];
+const defaultQuestionModules = ["meta", "localPlayer", "selection", "cities", "units", "governors", "trade", "cityStates", "techs", "civics", "government", "policies", "resources", "economy"];
 
 export async function summarizeSnapshotFile(snapshotPath: string, options: SummarizeSnapshotOptions = {}): Promise<SnapshotSummary> {
   const snapshot = JSON.parse(await readFile(snapshotPath, "utf8")) as SnapshotLike;
@@ -251,16 +278,25 @@ export async function summarizeSnapshotObject(snapshot: SnapshotLike, options: S
     throw new SnapshotSummaryError("snapshot failed schema or multiplayer fairness validation", validation);
   }
 
-  const availableModules = Array.isArray(snapshot.modules) ? snapshot.modules : [];
-  const localPlayerId = snapshot.localPlayer?.localPlayerId;
-  const cities = Array.isArray(snapshot.cities) ? snapshot.cities : [];
-  const units = Array.isArray(snapshot.units) ? snapshot.units : [];
+  const moduleState = resolveModuleState(snapshot);
+  const availableModules = moduleState.availableModules;
+  const localPlayerData = availableModules.includes("localPlayer") ? snapshot.localPlayer : undefined;
+  const localPlayerId = localPlayerData?.localPlayerId;
+  const cities = availableModules.includes("cities") && Array.isArray(snapshot.cities)
+    ? snapshot.cities.filter((city) => city.ownerPlayerId === localPlayerId)
+    : [];
+  const units = availableModules.includes("units") && Array.isArray(snapshot.units) ? snapshot.units : [];
   const ownUnits = units.filter((unit) => unit.ownerPlayerId === localPlayerId);
-  const visibleForeignUnits = units.filter((unit) => unit.ownerPlayerId !== localPlayerId && unit.visibility === "visible-now");
-  const tiles = Array.isArray(snapshot.visibleMap?.tiles) ? snapshot.visibleMap.tiles : [];
-  const metPlayers = Array.isArray(snapshot.diplomacy?.metPlayers) ? snapshot.diplomacy.metPlayers : [];
+  const visibleForeignUnits = units.filter((unit) => localPlayerId !== undefined && unit.ownerPlayerId !== localPlayerId && unit.visibility === "visible-now");
+  const usableMap = availableModules.includes("visibleMap") ? snapshot.visibleMap : undefined;
+  const tiles = Array.isArray(usableMap?.tiles) ? usableMap.tiles : [];
+  const metPlayers = availableModules.includes("diplomacyPublic") && Array.isArray(snapshot.diplomacy?.metPlayers)
+    ? snapshot.diplomacy.metPlayers
+    : [];
   const attention = Array.isArray(snapshot.attention) ? snapshot.attention : [];
-  const missingRecommendedModules = recommendedModules.filter((moduleName) => !availableModules.includes(moduleName));
+  const missingRecommendedModules = recommendedModules.filter((moduleName) =>
+    !availableModules.includes(moduleName) && !moduleState.notApplicableModules.includes(moduleName)
+  );
 
   const summary: SnapshotSummary = {
     validation,
@@ -278,13 +314,18 @@ export async function summarizeSnapshotObject(snapshot: SnapshotLike, options: S
     },
     localPlayer: {
       localPlayerId: number(localPlayerId),
-      civilizationType: text(snapshot.localPlayer?.civilizationType),
-      leaderType: text(snapshot.localPlayer?.leaderType),
-      visibility: text(snapshot.localPlayer?.visibility),
-      confidence: text(snapshot.localPlayer?.confidence)
+      civilizationType: text(localPlayerData?.civilizationType),
+      leaderType: text(localPlayerData?.leaderType),
+      visibility: text(localPlayerData?.visibility),
+      confidence: text(localPlayerData?.confidence)
     },
     coverage: {
       availableModules,
+      staleModules: moduleState.staleModules,
+      notApplicableModules: moduleState.notApplicableModules,
+      unavailableModules: moduleState.unavailableModules,
+      moduleStatus: structuredClone(snapshot.moduleStatus ?? {}),
+      unitsScope: snapshot.moduleStatus?.units?.scope,
       missingRecommendedModules,
       counts: {
         cities: cities.length,
@@ -299,13 +340,24 @@ export async function summarizeSnapshotObject(snapshot: SnapshotLike, options: S
     highlights: {
       cities: summarizeCities(cities),
       units: summarizeUnits(ownUnits, visibleForeignUnits),
-      map: summarizeMap(snapshot.visibleMap, ownUnits),
-      progression: summarizeProgression(snapshot.techs, snapshot.civics),
-      government: summarizeGovernment(snapshot.government, snapshot.resources),
+      selection: availableModules.includes("selection") ? summarizeSelection(snapshot.selection, cities, ownUnits) : [],
+      map: summarizeMap(usableMap, ownUnits, cities),
+      governors: summarizeGovernors(moduleState.currentModules.includes("governors") ? snapshot.governors : undefined),
+      trade: summarizeTrade(moduleState.currentModules.includes("trade") ? snapshot.trade : undefined),
+      cityStates: summarizeCityStates(moduleState.currentModules.includes("cityStates") ? snapshot.cityStates : undefined),
+      progression: summarizeProgression(
+        availableModules.includes("techs") ? snapshot.techs : undefined,
+        availableModules.includes("civics") ? snapshot.civics : undefined
+      ),
+      government: summarizeGovernment(
+        availableModules.includes("government") ? snapshot.government : undefined,
+        availableModules.includes("resources") ? snapshot.resources : undefined
+      ),
+      economy: summarizeEconomy(availableModules.includes("economy") ? snapshot.economy : undefined),
       diplomacy: summarizeDiplomacy(metPlayers),
       attention: summarizeAttention(attention)
     },
-    syncAdvice: buildSyncAdvice(snapshot, availableModules, options),
+    syncAdvice: buildSyncAdvice(snapshot, availableModules, moduleState.staleModules, moduleState.notApplicableModules, options),
     gaps: []
   };
 
@@ -319,12 +371,17 @@ export function formatSnapshotSummaryMarkdown(summary: SnapshotSummary): string 
     "",
     "## 我已确认的信息",
     `- 第 ${summary.snapshot.gameTurn} 回合，${summary.snapshot.isMultiplayer ? "多人局" : "单人局"}，${summary.snapshot.ruleset} / ${summary.snapshot.gameSpeed} / ${summary.snapshot.mapSize}`,
-    `- 本地玩家：${summary.localPlayer.leaderType} / ${summary.localPlayer.civilizationType}（player ${summary.localPlayer.localPlayerId}）`,
+    `- 本地玩家：${summary.localPlayer.leaderType || "未记录"} / ${summary.localPlayer.civilizationType || "未记录"}（player ${summary.localPlayer.localPlayerId ?? "?"}）`,
     `- 导出：${summary.snapshot.exportType}，${summary.snapshot.visibilityMode}，${summary.snapshot.exportedAt}`,
     `- 校验：${summary.validation.ok ? "通过" : "未通过，需要先处理校验问题"}`,
     "",
     "## 模块覆盖",
     `- 已覆盖：${labelModules(summary.coverage.availableModules).join("、") || "无"}`,
+    `- 当前规则不适用：${labelModules(summary.coverage.notApplicableModules).join("、") || "无"}`,
+    `- 本次采集不可用：${labelModules(summary.coverage.unavailableModules).join("、") || "无"}`,
+    `- 已过期：${labelModules(summary.coverage.staleModules).join("、") || "无"}`,
+    ...Object.entries(summary.coverage.moduleStatus).sort(([a], [b]) => compareText(a, b)).map(([name, capture]) =>
+      `- ${name} 采集：第 ${capture.capturedTurn} 回合，${capture.capturedAt}${capture.scope ? `，${capture.scope}` : ""}`),
     `- 建议更新：${labelModules(summary.coverage.missingRecommendedModules).join("、") || "无"}`,
     `- 计数：${summary.coverage.counts.cities} 城，${summary.coverage.counts.ownUnits} 个自有单位，${summary.coverage.counts.visibleForeignUnits} 个当前可见外方单位，${summary.coverage.counts.visibleTiles} 个可见/已揭示地块`,
     "",
@@ -332,9 +389,14 @@ export function formatSnapshotSummaryMarkdown(summary: SnapshotSummary): string 
     "- 位置说明：下列坐标只用于内部核对和 SVG 对齐；回复玩家时请改写成相对位置、屏幕方向和可见锚点。",
     ...sectionBullets("城市", summary.highlights.cities),
     ...sectionBullets("单位", summary.highlights.units),
+    ...sectionBullets("当前选择", summary.highlights.selection),
+    ...sectionBullets("总督", summary.highlights.governors),
+    ...sectionBullets("商路", summary.highlights.trade),
+    ...sectionBullets("已遇见城邦", summary.highlights.cityStates),
     ...sectionBullets("可见地图", summary.highlights.map),
     ...sectionBullets("科技/市政", summary.highlights.progression),
     ...sectionBullets("政体/资源", summary.highlights.government),
+    ...sectionBullets("经济态势", summary.highlights.economy),
     ...sectionBullets("外交", summary.highlights.diplomacy),
     ...sectionBullets("注意事项", summary.highlights.attention),
     "",
@@ -351,14 +413,212 @@ function summarizeCities(cities: CityLike[]): string[] {
     return ["没有城市条目。"];
   }
 
-  return cities.slice(0, 8).map((city) => {
+  return [...cities].sort(compareCitiesByPriority).slice(0, 8).map((city) => {
     const production = city.currentProduction?.name ?? city.currentProduction?.type ?? "未记录生产";
     const turns = typeof city.turnsUntilComplete === "number" ? `，${city.turnsUntilComplete} 回合完成` : "";
+    const productionProgress = typeof city.currentProductionProgress === "number" && typeof city.currentProductionCost === "number"
+      ? `，生产进度 ${city.currentProductionProgress}/${city.currentProductionCost}`
+      : "";
+    const growth = typeof city.turnsUntilGrowth === "number" ? `，${city.turnsUntilGrowth} 回合增长` : "";
+    const food = typeof city.foodStock === "number" || typeof city.foodSurplus === "number"
+      ? `，粮食 ${city.foodStock ?? "?"}${typeof city.foodSurplus === "number" ? `（每回合 ${city.foodSurplus >= 0 ? "+" : ""}${city.foodSurplus}` : ""}${typeof city.growthThreshold === "number" ? `/${city.growthThreshold}` : ""}${typeof city.foodSurplus === "number" ? "）" : ""}`
+      : "";
+    const housing = typeof city.housing === "number" ? `，住房 ${city.housing}` : "";
+    const amenities = typeof city.amenities === "number"
+      ? `，宜居度 ${city.amenities}${typeof city.amenitiesNeeded === "number" ? `/${city.amenitiesNeeded}` : ""}`
+      : "";
     const yields = city.yields
       ? `，产出 ${compactYields(city.yields)}`
       : "";
-    return `${city.name ?? city.id ?? "Unnamed city"}：人口 ${city.population ?? "?"}，正在 ${production}${turns}${yields}`;
+    const siege = city.underSiege === true ? "，正在被围城" : "";
+    const infrastructure = [
+      city.districts?.length ? `区域 ${formatDistrictItems(city.districts, 3)}` : "",
+      city.buildings?.length ? `建筑 ${formatNamedItems(city.buildings, 3)}` : "",
+      typeof city.populationLimitedDistrictsUsed === "number" && typeof city.populationLimitedDistrictsCapacity === "number"
+        ? `人口限制区域 ${city.populationLimitedDistrictsUsed}/${city.populationLimitedDistrictsCapacity}`
+        : ""
+    ].filter(Boolean).join("，");
+    const infrastructureText = infrastructure ? `，${infrastructure}` : "";
+    const priorities = cityPriorityLabels(city);
+    const priorityText = priorities.length > 0 ? `，优先事项：${priorities.join("、")}` : "";
+    return `${city.name ?? city.id ?? "Unnamed city"}：人口 ${city.population ?? "?"}，正在 ${production}${turns}${productionProgress}${growth}${food}${housing}${amenities}${yields}${siege}${infrastructureText}${priorityText}`;
   });
+}
+
+function resolveModuleState(snapshot: SnapshotLike): { availableModules: string[]; currentModules: string[]; staleModules: string[]; notApplicableModules: string[]; unavailableModules: string[] } {
+  const declaredModules = new Set(Array.isArray(snapshot.modules) ? snapshot.modules : []);
+  const moduleStatus = snapshot.moduleStatus ?? {};
+  const gameTurn = snapshot.session?.gameTurn;
+  const currentModules = [...declaredModules].filter((moduleName) =>
+    gameTurn !== undefined && moduleStatus[moduleName]?.capturedTurn === gameTurn
+  );
+  const notApplicableModules = currentModules.filter((moduleName) => moduleAvailability(snapshot, moduleName) === "not-applicable").sort(compareText);
+  const unavailableModules = currentModules.filter((moduleName) =>
+    isDomainModule(moduleName) && moduleAvailability(snapshot, moduleName) !== "available" && moduleAvailability(snapshot, moduleName) !== "not-applicable"
+  ).sort(compareText);
+  const availableModules = currentModules.filter((moduleName) =>
+    !isDomainModule(moduleName) || moduleAvailability(snapshot, moduleName) === "available"
+  ).sort(compareText);
+  const staleModules = Object.entries(moduleStatus)
+    .filter(([, status]) => status.capturedTurn !== gameTurn)
+    .map(([moduleName]) => moduleName)
+    .sort(compareText);
+  return { availableModules, currentModules: currentModules.sort(compareText), staleModules, notApplicableModules, unavailableModules };
+}
+
+function isDomainModule(moduleName: string): boolean {
+  return ["governors", "trade", "cityStates"].includes(moduleName);
+}
+
+function moduleAvailability(snapshot: SnapshotLike, moduleName: string): string | undefined {
+  if (moduleName === "governors") return snapshot.governors?.availability;
+  if (moduleName === "trade") return snapshot.trade?.availability;
+  if (moduleName === "cityStates") return snapshot.cityStates?.availability;
+  return undefined;
+}
+
+function formatNamedItems(items: NamedTypeLike[], limit: number): string {
+  const values = items.slice(0, limit).map((item) => item.name ?? item.type ?? "未知");
+  return `${values.join("、")}${items.length > limit ? `等${items.length}项` : ""}`;
+}
+
+function formatDistrictItems(items: DistrictLike[], limit: number): string {
+  const values = items.slice(0, limit).map((item) => {
+    const status = item.isBuilt === true ? "（已建）" : item.isBuilt === false ? "（在建）" : "";
+    return `${item.name ?? item.type ?? "未知区域"}${status}`;
+  });
+  return `${values.join("、")}${items.length > limit ? `等${items.length}项` : ""}`;
+}
+
+function summarizeSelection(selection: SelectionLike | undefined, cities: CityLike[], ownUnits: UnitLike[]): string[] {
+  if (!selection) return ["未记录当前选择状态。"];
+  const describe = (label: string, entry: SelectionEntityLike): string => {
+    if (entry.status === "selected" && entry.id) {
+      const entity = label === "城市"
+        ? cities.find((city) => city.id === entry.id)
+        : ownUnits.find((unit) => unit.id === entry.id);
+      const entityLabel = entity?.name ?? (entity && "type" in entity ? entity.type : undefined);
+      return `${label}：${entityLabel ?? "已选择本方对象"}`;
+    }
+    const states: Record<string, string> = {
+      none: "当前未选择",
+      unsupported: "当前 API 不支持读取",
+      error: "读取失败"
+    };
+    return `${label}：${states[entry.status] ?? "状态未知"}`;
+  };
+  return [`${describe("城市", selection.city)}；${describe("单位", selection.unit)}`];
+}
+
+function summarizeGovernors(data: GovernorDataLike | undefined): string[] {
+  if (!data) return ["模块未刷新或已过期。"];
+  if (data.availability === "not-applicable") return ["当前规则不适用。"];
+  if (data.availability !== "available") return ["本次采集不可用；不能据此判断没有总督或头衔。"];
+  const titles = typeof data.titlesAvailable === "number" ? `可用头衔 ${data.titlesAvailable}` : "可用头衔未知";
+  const spent = typeof data.titlesSpent === "number" ? `，已用 ${data.titlesSpent}` : "";
+  const canAppoint = data.canAppoint === true ? "，当前可任命" : "";
+  const governorRows = [...(data.governors ?? [])].sort((left, right) => {
+    const rank = (item: NonNullable<GovernorDataLike["governors"]>[number]): number => {
+      const status = item.status;
+      if (status === "needs-assignment" || (status === undefined && item.assigned === false && item.appointed === true)) return 0;
+      if (status === "transitioning" || (status === undefined && item.appointed === true && item.established === false)) return 1;
+      if (status === "neutralized") return 2;
+      if (status === "established" || item.established === true) return 3;
+      if (item.appointed === false) return 4;
+      return 5;
+    };
+    return rank(left) - rank(right) ||
+      compareOptionalNumbers(left.turnsUntilEstablished, right.turnsUntilEstablished) ||
+      compareText(left.type ?? left.name ?? "", right.type ?? right.name ?? "");
+  });
+  const entries = governorRows.slice(0, 6).map((governor) => {
+    const statusLabels: Record<string, string> = {
+      "needs-assignment": "待派驻",
+      transitioning: "派驻中",
+      established: "已就职",
+      neutralized: "被压制"
+    };
+    const state = statusLabels[governor.status ?? ""] ??
+      (governor.assigned === false && governor.appointed === true ? "待派驻" :
+        governor.appointed === true && governor.established === false ? "派驻中" :
+          governor.established === true ? "已就职" :
+            governor.appointed === false ? "待任命" : "状态未知");
+    const city = governor.assignedCityName ? `至${governor.assignedCityName}` : "";
+    const title = governor.title ? `（${governor.title}）` : "";
+    const promotions = governor.promotions?.length ? `，晋升 ${formatNamedItems(governor.promotions, 3)}` : "";
+    const turns = state === "派驻中" && typeof governor.turnsUntilEstablished === "number"
+      ? `，剩余 ${governor.turnsUntilEstablished} 回合就职`
+      : state === "派驻中" && typeof governor.turnsToEstablish === "number"
+      ? `，基础就职耗时 ${governor.turnsToEstablish} 回合`
+      : "";
+    return `${governor.name ?? governor.type ?? "未知总督"}${title}：${state}${city}${turns}${promotions}`;
+  });
+  const appointment = data.canAppoint === false ? "，当前不可任命" : "";
+  const entryText = entries.length > 0
+    ? `；${entries.join("；")}`
+    : data.governors === undefined ? "；总督名单未知" : "；当前没有总督条目";
+  return [`${titles}${spent}${canAppoint}${appointment}${entryText}`];
+}
+
+function summarizeTrade(data: TradeDataLike | undefined): string[] {
+  if (!data) return ["模块未刷新或已过期。"];
+  if (data.availability === "not-applicable") return ["当前规则不适用。"];
+  if (data.availability !== "available") return ["本次采集不可用；不能据此判断没有商路。"];
+  const capacity = typeof data.capacity === "number" ? data.capacity : undefined;
+  const active = data.activeCount;
+  const counts = capacity !== undefined && active !== undefined
+    ? `已用 ${active}/${capacity}${Math.max(0, capacity - active) > 0 ? `，空位 ${capacity - active}` : ""}`
+    : capacity !== undefined ? `容量 ${capacity}，已用数量未知` : "容量或已用数量未知";
+  const routeRows = [...(data.routes ?? [])].sort((left, right) =>
+    compareOptionalNumbers(left.turnsRemaining, right.turnsRemaining) ||
+    compareText(left.originCityId ?? left.originCityName ?? "", right.originCityId ?? right.originCityName ?? "") ||
+    compareText(left.destinationCityId ?? left.destinationCityName ?? "", right.destinationCityId ?? right.destinationCityName ?? "")
+  );
+  const routes = routeRows.slice(0, 5).map((route) =>
+    `${route.originCityName ?? route.originCityId ?? "来源未知"}→${route.destinationCityName ?? route.destinationCityId ?? "目的地未知"}${typeof route.turnsRemaining === "number" ? `（${route.turnsRemaining} 回合）` : ""}`
+  );
+  const routeText = routes.length > 0
+    ? `；现有路线：${routes.join("；")}`
+    : data.routes === undefined ? "；路线列表未知" : "；当前没有现有路线条目";
+  return [`${counts}${routeText}`];
+}
+
+function summarizeCityStates(data: CityStatesDataLike | undefined): string[] {
+  if (!data) return ["模块未刷新或已过期。"];
+  if (data.availability === "not-applicable") return ["当前规则不适用。"];
+  if (data.availability !== "available") return ["本次采集不可用；不能据此判断没有已遇见城邦。"];
+  const envoys = typeof data.availableEnvoys === "number" ? `可用使者 ${data.availableEnvoys}` : "可用使者数量未知";
+  const cityStateRows = [...(data.cityStates ?? [])].sort((left, right) => {
+    const earliestQuest = (quests: CityStateQuestLike[] | undefined): number | undefined => {
+      const turns = (quests ?? []).flatMap((quest) => typeof quest.turnsRemaining === "number" ? [quest.turnsRemaining] : []);
+      return turns.length > 0 ? Math.min(...turns) : undefined;
+    };
+    const questRank = (quests: CityStateQuestLike[] | undefined): number => quests === undefined ? 2 : quests.length > 0 ? 0 : 1;
+    return questRank(left.quests) - questRank(right.quests) ||
+      compareOptionalNumbers(earliestQuest(left.quests), earliestQuest(right.quests)) ||
+      (right.envoys ?? -1) - (left.envoys ?? -1) ||
+      compareOptionalNumbers(left.playerId, right.playerId) ||
+      compareText(left.type ?? left.name ?? "", right.type ?? right.name ?? "") ||
+      compareText(canonicalString(left), canonicalString(right));
+  });
+  const entries = cityStateRows.slice(0, 6).map((cityState) => {
+    const quests = cityState.quests === undefined
+      ? undefined
+      : [...cityState.quests].sort((left, right) =>
+        compareOptionalNumbers(left.turnsRemaining, right.turnsRemaining) ||
+        compareText(left.type ?? left.name ?? "", right.type ?? right.name ?? "")
+      ).slice(0, 2).map((quest) => `${quest.name ?? quest.type ?? "未知任务"}${typeof quest.turnsRemaining === "number" ? `（${quest.turnsRemaining} 回合）` : ""}`).join("、");
+    const rewardLabels = [["oneEnvoy", "1使者"], ["threeEnvoys", "3使者"], ["sixEnvoys", "6使者"], ["suzerain", "宗主"]] as const;
+    const rewards = rewardLabels.filter(([key]) => Boolean(cityState.rewards?.[key]))
+      .map(([key, label]) => `${label}：${cityState.rewards?.[key]}`).join("；");
+    const suzerain = cityState.isSuzerain === true ? "，当前宗主" : cityState.isSuzerain === false ? "，当前非宗主" : "，宗主状态未知";
+    const questText = quests === undefined ? "任务状态未知" : quests ? `任务 ${quests}` : "无已记录任务";
+    return `${cityState.name ?? cityState.type ?? `已遇见城邦 ${cityState.playerId ?? "?"}`}：${cityState.envoys ?? "?"} 使者${suzerain}${rewards ? `，奖励 ${rewards}` : ""}，${questText}`;
+  });
+  const entryText = entries.length > 0
+    ? `；${entries.join("；")}`
+    : data.cityStates === undefined ? "；城邦列表未知" : "；当前没有已遇见城邦条目";
+  return [`${envoys}${entryText}`];
 }
 
 function summarizeUnits(ownUnits: UnitLike[], visibleForeignUnits: UnitLike[]): string[] {
@@ -367,19 +627,26 @@ function summarizeUnits(ownUnits: UnitLike[], visibleForeignUnits: UnitLike[]): 
     lines.push("没有自有单位条目。");
   } else {
     lines.push(
-      ...ownUnits.slice(0, 8).map((unit) => {
+      ...sortUnitsByPriority(ownUnits, visibleForeignUnits).slice(0, 8).map((unit) => {
         const damage = typeof unit.damage === "number" ? `，伤害 ${unit.damage}` : "";
         const moves = typeof unit.movesRemaining === "number" ? `，剩余移动 ${unit.movesRemaining}` : "";
-        return `自有 ${unit.name ?? unit.type ?? unit.id} @ (${unit.x ?? "?"}, ${unit.y ?? "?"})${damage}${moves}`;
+        const strength = unitStrengthText(unit);
+        const details = unitDetailText(unit);
+        const priorities = unitPriorityLabels(unit, visibleForeignUnits);
+        const priorityText = priorities.length > 0 ? `，优先事项：${priorities.join("、")}` : "";
+        return `自有 ${unit.name ?? unit.type ?? unit.id} @ (${unit.x ?? "?"}, ${unit.y ?? "?"})${damage}${moves}${strength}${details}${priorityText}`;
       })
     );
   }
 
   if (visibleForeignUnits.length > 0) {
     lines.push(
-      ...visibleForeignUnits.slice(0, 8).map((unit) => {
+      ...sortUnitsByPriority(visibleForeignUnits, ownUnits).slice(0, 8).map((unit) => {
         const damage = typeof unit.damage === "number" ? `，伤害 ${unit.damage}` : "";
-        return `当前可见外方 ${unit.name ?? unit.type ?? unit.id} @ (${unit.x ?? "?"}, ${unit.y ?? "?"})${damage}`;
+        const strength = unitStrengthText(unit);
+        const priorities = unitPriorityLabels(unit, ownUnits);
+        const priorityText = priorities.length > 0 ? `，优先事项：${priorities.join("、")}` : "";
+        return `当前可见外方 ${unit.name ?? unit.type ?? unit.id} @ (${unit.x ?? "?"}, ${unit.y ?? "?"})${damage}${strength}${priorityText}`;
       })
     );
   }
@@ -387,7 +654,219 @@ function summarizeUnits(ownUnits: UnitLike[], visibleForeignUnits: UnitLike[]): 
   return lines;
 }
 
-function summarizeMap(visibleMap: VisibleMapLike | undefined, ownUnits: UnitLike[] = []): string[] {
+function compareCitiesByPriority(left: CityLike, right: CityLike): number {
+  const priorityDifference = cityPriorityRank(left) - cityPriorityRank(right);
+  if (priorityDifference !== 0) return priorityDifference;
+
+  const rank = cityPriorityRank(left);
+  if (rank === 2) {
+    const turnsDifference = compareOptionalNumbers(left.turnsUntilComplete, right.turnsUntilComplete);
+    if (turnsDifference !== 0) return turnsDifference;
+  } else if (rank === 3) {
+    const housingDifference = compareOptionalNumbers(cityHousingRemaining(left), cityHousingRemaining(right));
+    if (housingDifference !== 0) return housingDifference;
+  } else if (rank === 4) {
+    const shortageDifference = amenityShortage(right) - amenityShortage(left);
+    if (shortageDifference !== 0) return shortageDifference;
+  }
+
+  return compareCityIdentity(left, right);
+}
+
+function cityPriorityRank(city: CityLike): number {
+  if (city.underSiege === true) return -2;
+  if (typeof city.turnsUntilStarvation === "number") return -1;
+  if (typeof city.foodSurplus === "number" && city.foodSurplus < 0) return 0;
+  if (hasNoProduction(city)) return 1;
+  if (hasProduction(city) && typeof city.turnsUntilComplete === "number" && city.turnsUntilComplete <= 1) return 2;
+  const housingRemaining = cityHousingRemaining(city);
+  if (typeof housingRemaining === "number" && housingRemaining <= 1) return 3;
+  if (amenityShortage(city) > 0) return 4;
+  if (typeof city.turnsUntilGrowth === "number" && city.turnsUntilGrowth <= 1) return 5;
+  return 6;
+}
+
+function cityPriorityLabels(city: CityLike): string[] {
+  const labels: string[] = [];
+  if (city.underSiege === true) labels.push("正在被围城");
+  if (typeof city.turnsUntilStarvation === "number") labels.push(`${city.turnsUntilStarvation} 回合后饥荒`);
+  if (typeof city.foodSurplus === "number" && city.foodSurplus < 0) labels.push(`粮食每回合减少 ${Math.abs(city.foodSurplus)}`);
+  if (hasNoProduction(city)) labels.push("待选生产");
+  if (hasProduction(city) && typeof city.turnsUntilComplete === "number" && city.turnsUntilComplete <= 1) labels.push("即将完成");
+  const housingRemaining = cityHousingRemaining(city);
+  if (typeof housingRemaining === "number") labels.push(`住房余量 ${housingRemaining}`);
+  if (amenityShortage(city) > 0) labels.push(`宜居度不足 ${city.amenities}/${city.amenitiesNeeded}`);
+  return labels;
+}
+
+function hasProduction(city: CityLike): boolean {
+  const type = (city.currentProduction?.type ?? "").trim().toUpperCase();
+  const name = (city.currentProduction?.name ?? "").trim();
+  if (!type && !name) return false;
+  return !["NONE", "NO_PRODUCTION", "BUILDING_NONE", "UNIT_NONE", "PROJECT_NONE", "UNKNOWN", "UNKNOWN_PRODUCTION"].includes(type) && name.toUpperCase() !== "UNKNOWN";
+}
+
+function hasNoProduction(city: CityLike): boolean {
+  const type = (city.currentProduction?.type ?? "").trim().toUpperCase();
+  const name = (city.currentProduction?.name ?? "").trim().toUpperCase();
+  return ["NONE", "NO_PRODUCTION", "BUILDING_NONE", "UNIT_NONE", "PROJECT_NONE"].includes(type) ||
+    ["NONE", "NO PRODUCTION"].includes(name);
+}
+
+function cityHousingRemaining(city: CityLike): number | undefined {
+  if (typeof city.housing === "number" && typeof city.population === "number") return city.housing - city.population;
+  return undefined;
+}
+
+function amenityShortage(city: CityLike): number {
+  return typeof city.amenities === "number" && typeof city.amenitiesNeeded === "number"
+    ? Math.max(0, city.amenitiesNeeded - city.amenities)
+    : 0;
+}
+
+function compareUnitsByPriority(left: UnitLike, right: UnitLike, opposingUnits: UnitLike[]): number {
+  const priorityDifference = unitPriorityRank(left, opposingUnits) - unitPriorityRank(right, opposingUnits);
+  if (priorityDifference !== 0) return priorityDifference;
+  const damageDifference = compareOptionalNumbers(right.damage, left.damage);
+  if (damageDifference !== 0) return damageDifference;
+  const movesDifference = compareOptionalNumbers(right.movesRemaining, left.movesRemaining);
+  if (movesDifference !== 0) return movesDifference;
+  return compareUnitIdentity(left, right);
+}
+
+function unitPriorityRank(unit: UnitLike, opposingUnits: UnitLike[]): number {
+  if (typeof unit.damage === "number" && unit.damage >= 50) return 0;
+  if (isInVisibleContact(unit, opposingUnits)) return 1;
+  if ((unit.promotions?.length ?? 0) > 0 || typeof unit.upgradeCost === "number") return 2;
+  if (typeof unit.movesRemaining === "number" && unit.movesRemaining > 0) return 3;
+  if (typeof unit.buildCharges === "number" || isSettlerOrBuilder(unit)) return 4;
+  return 5;
+}
+
+function unitPriorityLabels(unit: UnitLike, opposingUnits: UnitLike[]): string[] {
+  const labels: string[] = [];
+  if (typeof unit.damage === "number" && unit.damage >= 50) labels.push("重伤");
+  if (isInVisibleContact(unit, opposingUnits)) labels.push("邻近可见外方单位");
+  if (typeof unit.movesRemaining === "number" && unit.movesRemaining > 0) labels.push("尚有移动力");
+  if (unit.promotions?.length) labels.push(`已获晋升 ${formatNamedItems(unit.promotions, 2)}`);
+  if (typeof unit.upgradeCost === "number") labels.push(`升级费用 ${unit.upgradeCost}`);
+  if (typeof unit.buildCharges === "number") labels.push(`建造次数 ${unit.buildCharges}`);
+  const role = unitRole(unit);
+  if (role) labels.push(role);
+  return labels;
+}
+
+function unitStrengthText(unit: UnitLike): string {
+  const values: string[] = [];
+  if (typeof unit.combatStrength === "number") values.push(`近战 ${unit.combatStrength}`);
+  if (typeof unit.rangedStrength === "number") values.push(`远程 ${unit.rangedStrength}`);
+  if (typeof unit.bombardStrength === "number") values.push(`轰炸 ${unit.bombardStrength}`);
+  return values.length > 0 ? `，${values.join("/" )}` : "";
+}
+
+function unitDetailText(unit: UnitLike): string {
+  const values: string[] = [];
+  if (typeof unit.range === "number") values.push(`射程 ${unit.range}`);
+  if (typeof unit.maxMoves === "number") values.push(`最大移动 ${unit.maxMoves}`);
+  if (typeof unit.experience === "number") {
+    const next = typeof unit.experienceForNextLevel === "number" ? `/${unit.experienceForNextLevel}` : "";
+    values.push(`经验 ${unit.experience}${next}`);
+  }
+  if (typeof unit.level === "number") values.push(`等级 ${unit.level}`);
+  if (unit.militaryFormation) values.push(`编队 ${compactGameType(unit.militaryFormation)}`);
+  return values.length > 0 ? `，${values.join("，")}` : "";
+}
+
+function isSettlerOrBuilder(unit: UnitLike): boolean {
+  return unitRole(unit) !== "";
+}
+
+function unitRole(unit: UnitLike): string {
+  const type = (unit.type ?? "").toUpperCase();
+  if (type.includes("SETTLER")) return "开拓者";
+  if (type.includes("BUILDER")) return "建造者";
+  return "";
+}
+
+function isInVisibleContact(unit: UnitLike, opposingUnits: UnitLike[]): boolean {
+  if (typeof unit.x !== "number" || typeof unit.y !== "number") return false;
+  return opposingUnits.some((other) =>
+    other.visibility === "visible-now" &&
+    typeof other.x === "number" && typeof other.y === "number" &&
+    hexDistance(unit.x as number, unit.y as number, other.x, other.y) <= 1
+  );
+}
+
+function sortUnitsByPriority(units: UnitLike[], opposingUnits: UnitLike[]): UnitLike[] {
+  return [...units].sort((left, right) => compareUnitsByPriority(left, right, opposingUnits));
+}
+
+function compareCityIdentity(left: CityLike, right: CityLike): number {
+  return compareText(left.id ?? left.name ?? "", right.id ?? right.name ?? "") ||
+    compareCoordinates(left, right) ||
+    compareText(canonicalString(left), canonicalString(right));
+}
+
+function compareUnitIdentity(left: UnitLike, right: UnitLike): number {
+  return compareText(left.id ?? left.type ?? left.name ?? "", right.id ?? right.type ?? right.name ?? "") ||
+    compareCoordinates(left, right) ||
+    compareText(canonicalString(left), canonicalString(right));
+}
+
+function compareTilesByCoordinates(left: TileLike, right: TileLike): number {
+  return compareCoordinates(left, right) || compareText(canonicalString(left), canonicalString(right));
+}
+
+function compareTilesByPlanningPriority(left: TileLike, right: TileLike, anchors: Array<{ x: number; y: number }>): number {
+  const visibilityDifference = Number(right.visibleNow === true) - Number(left.visibleNow === true);
+  if (visibilityDifference !== 0) return visibilityDifference;
+  const distanceDifference = compareNumbers(nearestAnchorDistance(left, anchors), nearestAnchorDistance(right, anchors));
+  if (distanceDifference !== 0) return distanceDifference;
+  return compareTilesByCoordinates(left, right);
+}
+
+function nearestAnchorDistance(tile: TileLike, anchors: Array<{ x: number; y: number }>): number {
+  if (typeof tile.x !== "number" || typeof tile.y !== "number" || anchors.length === 0) return Number.POSITIVE_INFINITY;
+  return anchors.reduce((nearest, anchor) =>
+    Math.min(nearest, hexDistance(tile.x as number, tile.y as number, anchor.x, anchor.y)), Number.POSITIVE_INFINITY);
+}
+
+function hexDistance(leftX: number, leftY: number, rightX: number, rightY: number): number {
+  const leftQ = leftX - Math.floor(leftY / 2);
+  const rightQ = rightX - Math.floor(rightY / 2);
+  const deltaQ = leftQ - rightQ;
+  const deltaR = leftY - rightY;
+  return Math.max(Math.abs(deltaQ), Math.abs(deltaR), Math.abs(deltaQ + deltaR));
+}
+
+function compareCoordinates(left: { x?: number; y?: number }, right: { x?: number; y?: number }): number {
+  return compareOptionalNumbers(left.y, right.y) || compareOptionalNumbers(left.x, right.x);
+}
+
+function compareOptionalNumbers(left: number | undefined, right: number | undefined): number {
+  if (left === undefined) return right === undefined ? 0 : 1;
+  if (right === undefined) return -1;
+  return compareNumbers(left, right);
+}
+
+function compareNumbers(left: number, right: number): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function compareText(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function canonicalString(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalString).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) => compareText(left, right));
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonicalString(item)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "undefined";
+}
+
+function summarizeMap(visibleMap: VisibleMapLike | undefined, ownUnits: UnitLike[] = [], ownCities: CityLike[] = []): string[] {
   const tiles = Array.isArray(visibleMap?.tiles) ? visibleMap.tiles : [];
   const bounds = visibleMap?.bounds;
   const visibleNow = tiles.filter((tile) => tile.visibleNow === true).length;
@@ -396,8 +875,18 @@ function summarizeMap(visibleMap: VisibleMapLike | undefined, ownUnits: UnitLike
   const revealedText = typeof visibleMap?.revealedTileCount === "number" ? `，已揭示 ${visibleMap.revealedTileCount}` : "";
   const truncationText = visibleMap?.truncated === true ? `；地图视野导出已截断，上限 ${visibleMap.tileLimit ?? "未知"}` : "";
   const lines = [`${boundsText}；导出地块 ${tiles.length}${revealedText}，当前可见 ${visibleNow}，含单位地块 ${withUnits}${truncationText}`];
-  const tileByCoord = new Map(tiles.map((tile) => [`${tile.x},${tile.y}`, tile]));
-  const unitTiles = ownUnits
+  const orderedTiles = [...tiles].sort(compareTilesByCoordinates);
+  const tileByCoord = new Map(orderedTiles.map((tile) => [`${tile.x},${tile.y}`, tile]));
+  const orderedOwnUnits = sortUnitsByPriority(ownUnits, []);
+  const anchors: Array<{ x: number; y: number }> = [
+    ...orderedOwnUnits
+      .filter((unit): unit is UnitLike & { x: number; y: number } => typeof unit.x === "number" && typeof unit.y === "number")
+      .map((unit) => ({ x: unit.x, y: unit.y })),
+    ...ownCities
+      .filter((city): city is CityLike & { x: number; y: number } => typeof city.x === "number" && typeof city.y === "number")
+      .map((city) => ({ x: city.x, y: city.y }))
+  ];
+  const unitTiles = orderedOwnUnits
     .filter((unit) => typeof unit.x === "number" && typeof unit.y === "number")
     .slice(0, 8)
     .map((unit) => {
@@ -408,13 +897,14 @@ function summarizeMap(visibleMap: VisibleMapLike | undefined, ownUnits: UnitLike
     lines.push(`单位所在地块：${unitTiles.join("；")}`);
   }
 
-  const adjacentTiles = summarizeAdjacentUnitTiles(ownUnits, tileByCoord);
+  const adjacentTiles = summarizeAdjacentUnitTiles(orderedOwnUnits, tileByCoord);
   if (adjacentTiles.length > 0) {
     lines.push(`单位相邻地块：${adjacentTiles.join("；")}`);
   }
 
   const resourceTiles = tiles
     .filter((tile) => typeof tile.resourceType === "string")
+    .sort((left, right) => compareTilesByPlanningPriority(left, right, anchors))
     .slice(0, 12)
     .map((tile) => `${labelResource(tile.resourceType)} @ (${tile.x ?? "?"}, ${tile.y ?? "?"})：${describeTile(tile, { includeResource: false })}`);
   if (resourceTiles.length > 0) {
@@ -423,6 +913,7 @@ function summarizeMap(visibleMap: VisibleMapLike | undefined, ownUnits: UnitLike
 
   const planningTiles = tiles
     .filter((tile) => hasPlanningFacts(tile))
+    .sort((left, right) => compareTilesByPlanningPriority(left, right, anchors))
     .slice(0, 12)
     .map((tile) => `(${tile.x ?? "?"}, ${tile.y ?? "?"})：${describeTile(tile)}`);
   if (planningTiles.length > 0) {
@@ -472,6 +963,9 @@ function summarizeProgression(techs: ProgressionLike | undefined, civics: Progre
   const lines: string[] = [];
   lines.push(`当前科技：${techs?.current?.name ?? techs?.current?.type ?? "未记录"}`);
   lines.push(`当前市政：${civics?.current?.name ?? civics?.current?.type ?? "未记录"}`);
+  for (const [label, data] of [["科技", techs], ["市政", civics]] as const) {
+    if (typeof data?.currentProgress === "number" && typeof data.currentCost === "number") lines.push(`${label}进度：${data.currentProgress}/${data.currentCost}`);
+  }
   if (Array.isArray(techs?.available) && techs.available.length > 0) {
     lines.push(`可选科技：${techs.available.map(named).join("、")}`);
   }
@@ -494,11 +988,20 @@ function summarizeGovernment(government: GovernmentLike | undefined, resources: 
   if (policies.length > 0) {
     lines.push(`政策卡：${policies.join("、")}`);
   }
+  if (government?.availablePolicies) {
+    lines.push(`可用政策：${[...government.availablePolicies].sort((a, b) => compareText(a.type ?? "", b.type ?? "")).map((p) => `${named(p)} (${p.slotType ?? "槽位未知"})${p.description ? `：${p.description}` : ""}`).join("；")}`);
+  }
   const resourceItems = Array.isArray(resources?.items) ? resources.items : [];
   if (resourceItems.length > 0) {
     lines.push(`资源：${resourceItems.map((item) => `${item.name ?? item.type}=${item.amount}`).join("、")}`);
   }
   return lines;
+}
+
+function summarizeEconomy(economy: SnapshotLike["economy"]): string[] {
+  if (!economy) return ["经济模块未采集。"];
+  const labels: Record<string, string> = { goldBalance: "金币", goldPerTurn: "净金币/回合", goldIncomePerTurn: "金币收入/回合", goldMaintenancePerTurn: "维护/回合", faithBalance: "信仰", faithPerTurn: "信仰/回合", sciencePerTurn: "科技/回合", culturePerTurn: "文化/回合" };
+  return Object.entries(labels).filter(([key]) => typeof economy[key] === "number").map(([key, label]) => `${label}：${economy[key]}`);
 }
 
 function summarizeDiplomacy(metPlayers: DiplomacyRowLike[]): string[] {
@@ -523,6 +1026,8 @@ function summarizeAttention(attention: AttentionLike[]): string[] {
 function buildSyncAdvice(
   snapshot: SnapshotLike,
   availableModules: string[],
+  staleModuleNames: string[],
+  notApplicableModuleNames: string[],
   options: SummarizeSnapshotOptions
 ): SnapshotSummary["syncAdvice"] {
   const question = options.question;
@@ -546,10 +1051,16 @@ function buildSyncAdvice(
     ? explicitModules
     : [...new Set((matchedRules.length > 0 ? matchedRules.flatMap((rule) => rule.modules) : defaultQuestionModules))];
   const intents = matchedRules.map((rule) => rule.id);
-  const missingModules = requiredModules.filter((moduleName) => !availableModules.includes(moduleName));
+  const missingModules = requiredModules.filter((moduleName) =>
+    !availableModules.includes(moduleName) && !notApplicableModuleNames.includes(moduleName)
+  );
+  const staleModules = requiredModules.filter((name) => staleModuleNames.includes(name));
+  const unavailableModules = resolveModuleState(snapshot).unavailableModules.filter((name) => requiredModules.includes(name));
+  const notApplicableModules = notApplicableModuleNames.filter((name) => requiredModules.includes(name));
+  const limitedModules = intents.some((intent) => ["war", "navy"].includes(intent)) && availableModules.includes("units") && snapshot.moduleStatus?.units?.scope !== "own-and-visible" ? ["units"] : [];
   const lowConfidenceRequiredModules = lowConfidenceModules(snapshot, requiredModules.filter((moduleName) => availableModules.includes(moduleName)));
 
-  if (missingModules.length === 0 && lowConfidenceRequiredModules.length === 0) {
+  if (missingModules.length === 0 && lowConfidenceRequiredModules.length === 0 && limitedModules.length === 0) {
     return {
       ok: true,
       question,
@@ -557,6 +1068,10 @@ function buildSyncAdvice(
       scenarios: intents,
       requiredModules,
       missingModules: [],
+      staleModules,
+      unavailableModules,
+      notApplicableModules,
+      limitedModules,
       lowConfidenceModules: [],
       recommendation: "当前 snapshot 已覆盖当前分析意图，可以继续分析。"
     };
@@ -564,18 +1079,14 @@ function buildSyncAdvice(
 
   const labels = labelModules(missingModules);
   const lowConfidenceLabels = labelModules(lowConfidenceRequiredModules);
-  const mapWindowOnly = missingModules.includes("visibleMap") && requiredModules.every((moduleName) =>
-    ["meta", "localPlayer", "units", "visibleMap"].includes(moduleName)
-  );
-  const action = mapWindowOnly
-    ? "点击「更新地图情报」"
-    : missingModules.includes("visibleMap")
-    ? "点击「更新地图情报」；如仍需城市运营、科技市政或政体政策信息，再选择对应专题情报"
-    : `选择「${labels.join("」「")}」`;
+  const action = "点击「更新战情」";
   const lowConfidenceAction = lowConfidenceRequiredModules.length > 0
-    ? `；另外 ${lowConfidenceLabels.join("、")} 置信度偏低，请重新汇总对应情报${lowConfidenceRequiredModules.includes("visibleMap") ? "或点击「更新地图情报」" : ""}。若置信度仍偏低，我会按低置信度来源处理`
+    ? `；另外 ${lowConfidenceLabels.join("、")} 置信度偏低，若刷新后仍偏低，我会按低置信度来源处理`
     : "";
   const missingText = missingModules.length > 0 ? `当前分析需要 ${labels.join("、")}。` : "当前意图所需情报已声明存在，但部分模块置信度偏低。";
+  const unavailableText = unavailableModules.length > 0
+    ? `本次 ${labelModules(unavailableModules).join("、")} 采集不可用；不能将其当作空结果。`
+    : "";
 
   return {
     ok: false,
@@ -584,8 +1095,12 @@ function buildSyncAdvice(
     scenarios: intents,
     requiredModules,
     missingModules,
+    staleModules,
+    unavailableModules,
+    notApplicableModules,
+    limitedModules,
     lowConfidenceModules: lowConfidenceRequiredModules,
-    recommendation: `${missingText}请在 Civ6 点击左上副官入口打开「战情简报」，${missingModules.length > 0 ? action : "重新汇总对应情报"}${lowConfidenceAction}。看到“简报已汇总，可继续由AI副官分析。”和“最近汇总：…”后，重新运行标准入口。`
+    recommendation: `${missingText}${unavailableText}请在 Civ6 点击左上副官入口打开「战情简报」，${action}${lowConfidenceAction}。看到“简报已汇总，可继续由AI副官分析。”和“最近汇总：…”后，重新运行标准入口。`
   };
 }
 
@@ -608,10 +1123,24 @@ function lowConfidenceModules(snapshot: SnapshotLike, modules: string[]): string
 
 function moduleConfidence(snapshot: SnapshotLike, moduleName: string): string | undefined {
   switch (moduleName) {
+    case "selection":
+      return snapshot.selection?.confidence;
     case "visibleMap":
       return snapshot.visibleMap?.confidence;
     case "diplomacyPublic":
       return snapshot.diplomacy?.confidence;
+    case "policies":
+      return snapshot.government?.confidence;
+    case "governors":
+      return snapshot.governors?.confidence;
+    case "trade":
+      return snapshot.trade?.confidence;
+    case "cityStates":
+      return snapshot.cityStates?.confidence;
+    case "government": case "resources": case "techs": case "civics": case "economy":
+      return snapshot[moduleName]?.confidence;
+    case "cities": case "units":
+      return snapshot.confidence?.[moduleName];
     default:
       return undefined;
   }
@@ -624,20 +1153,25 @@ function buildGaps(summary: SnapshotSummary): string[] {
     gaps.push("snapshot 未通过校验；请优先查看 schemaErrors/fairnessIssues，避免基于不合规数据分析。");
   }
   if (summary.coverage.counts.cities === 0) {
-    gaps.push("城市列表为空；逐城生产、区域和住房建议需要在战情简报中选择「城市运营」。");
+    gaps.push("当前摘要没有城市条目；不能据此推断生产、区域和住房状态。");
   }
   if (summary.coverage.counts.units === 0) {
-    gaps.push("部队列表为空；战争、侦察和护送建议需要在战情简报中选择「军事态势」或点击「更新地图情报」。");
+    gaps.push("当前摘要没有单位条目；不能据此推断周围没有可见威胁或可用单位。");
   }
   if (summary.coverage.counts.visibleTiles === 0) {
-    gaps.push("地图视野为空；铺城、战线和海军路线需要点击「更新地图情报」。");
+    gaps.push("当前摘要没有地图地块；铺城、战线和海军路线建议需要谨慎处理。");
+  }
+  if (summary.coverage.unavailableModules.length > 0) {
+    gaps.push(`本回合采集不可用的模块：${labelModules(summary.coverage.unavailableModules).join("、")}；不得把未知状态当作没有相关对象。`);
+  }
+  if (summary.coverage.notApplicableModules.length > 0) {
+    gaps.push(`当前规则不适用的模块：${labelModules(summary.coverage.notApplicableModules).join("、")}；该状态不阻塞本次分析。`);
   }
   if (summary.syncAdvice.lowConfidenceModules.length > 0) {
     gaps.push(`低置信度模块：${labelModules(summary.syncAdvice.lowConfidenceModules).join("、")}；请重新汇总对应情报，或在回答中明确按低置信度处理。`);
   }
-  if (!summary.coverage.availableModules.includes("notifications")) {
-    gaps.push("通知/待办模块未覆盖；这不会阻止基础分析，但可能漏掉可立即处理的鼓舞、尤里卡或外交提醒。");
-  }
+  if (summary.coverage.unitsScope === "own-only") gaps.push("单位模块仅含己方单位；不能由外方单位计数为零推断周围没有敌军。");
+  if (summary.coverage.staleModules.length > 0) gaps.push(`过期模块：${summary.coverage.staleModules.join("、")}；旧数据不参与摘要。`);
 
   return gaps;
 }
@@ -764,6 +1298,9 @@ function number(value: unknown): number {
 }
 
 export interface SnapshotLike {
+  moduleStatus?: Record<string, { capturedTurn: number; capturedAt: string; exportId: string; scope?: "own-only" | "own-and-visible" }>;
+  economy?: { confidence?: string; [key: string]: number | string | undefined };
+  confidence?: Record<string, string>;
   schemaVersion?: string;
   exportedAt?: string;
   source?: {
@@ -790,8 +1327,12 @@ export interface SnapshotLike {
     confidence?: string;
   };
   modules?: string[];
+  selection?: SelectionLike;
   cities?: CityLike[];
   units?: UnitLike[];
+  governors?: GovernorDataLike;
+  trade?: TradeDataLike;
+  cityStates?: CityStatesDataLike;
   visibleMap?: VisibleMapLike;
   techs?: ProgressionLike;
   civics?: ProgressionLike;
@@ -805,15 +1346,36 @@ export interface SnapshotLike {
 }
 
 interface CityLike {
+  ownerPlayerId?: number;
+  x?: number;
+  y?: number;
+  housing?: number;
+  amenities?: number;
+  amenitiesNeeded?: number;
+  turnsUntilGrowth?: number;
+  turnsUntilStarvation?: number;
   id?: string;
   name?: string;
   population?: number;
   currentProduction?: NamedTypeLike;
+  currentProductionProgress?: number;
+  currentProductionCost?: number;
   turnsUntilComplete?: number;
+  foodStock?: number;
+  foodSurplus?: number;
+  growthThreshold?: number;
+  underSiege?: boolean;
+  buildings?: NamedTypeLike[];
+  districts?: DistrictLike[];
+  populationLimitedDistrictsUsed?: number;
+  populationLimitedDistrictsCapacity?: number;
   yields?: Record<string, unknown>;
 }
 
 interface UnitLike {
+  combatStrength?: number;
+  rangedStrength?: number;
+  bombardStrength?: number;
   id?: string;
   type?: string;
   name?: string;
@@ -823,6 +1385,93 @@ interface UnitLike {
   y?: number;
   damage?: number;
   movesRemaining?: number;
+  range?: number;
+  maxMoves?: number;
+  buildCharges?: number;
+  experience?: number;
+  experienceForNextLevel?: number;
+  level?: number;
+  promotions?: NamedTypeLike[];
+  militaryFormation?: string;
+  upgradeCost?: number;
+}
+
+interface DistrictLike extends NamedTypeLike {
+  isBuilt?: boolean;
+}
+
+interface SelectionLike {
+  confidence?: string;
+  city: SelectionEntityLike;
+  unit: SelectionEntityLike;
+}
+
+interface SelectionEntityLike {
+  status: "selected" | "none" | "unsupported" | "error";
+  id: string | null;
+}
+
+interface GovernorDataLike {
+  availability?: "available" | "not-applicable" | "unavailable";
+  confidence?: string;
+  titlesAvailable?: number;
+  titlesSpent?: number;
+  canAppoint?: boolean;
+  governors?: Array<NamedTypeLike & {
+    appointed?: boolean;
+    assigned?: boolean;
+    assignedCityId?: string;
+    assignedCityName?: string;
+    established?: boolean;
+    turnsToEstablish?: number;
+    turnsUntilEstablished?: number;
+    neutralizedTurns?: number;
+    status?: string;
+    title?: string;
+    promotions?: NamedTypeLike[];
+  }>;
+}
+
+interface TradeDataLike {
+  availability?: "available" | "not-applicable" | "unavailable";
+  confidence?: string;
+  capacity?: number;
+  activeCount?: number;
+  routes?: Array<{
+    originCityId?: string;
+    originCityName?: string;
+    destinationCityId?: string;
+    destinationCityName?: string;
+    turnsRemaining?: number;
+  }>;
+}
+
+interface CityStatesDataLike {
+  availability?: "available" | "not-applicable" | "unavailable";
+  confidence?: string;
+  availableEnvoys?: number;
+  cityStates?: Array<{
+    playerId?: number;
+    type?: string;
+    name?: string;
+    envoys?: number;
+    isSuzerain?: boolean;
+    rewards?: {
+      oneEnvoy?: string;
+      threeEnvoys?: string;
+      sixEnvoys?: string;
+      suzerain?: string;
+    };
+    quests?: CityStateQuestLike[];
+  }>;
+}
+
+interface CityStateQuestLike {
+  type?: string;
+  name?: string;
+  description?: string;
+  turnsRemaining?: number;
+  reward?: string;
 }
 
 interface VisibleMapLike {
@@ -868,6 +1517,9 @@ interface TileLike {
 }
 
 interface ProgressionLike {
+  confidence?: string;
+  currentProgress?: number;
+  currentCost?: number;
   current?: NamedTypeLike;
   available?: NamedTypeLike[];
   boosts?: Array<{
@@ -877,11 +1529,14 @@ interface ProgressionLike {
 }
 
 interface GovernmentLike {
+  confidence?: string;
+  availablePolicies?: Array<NamedTypeLike & { slotType?: string; description?: string }>;
   currentGovernment?: NamedTypeLike;
   policies?: NamedTypeLike[];
 }
 
 interface ResourcesLike {
+  confidence?: string;
   items?: Array<{
     type?: string;
     name?: string;

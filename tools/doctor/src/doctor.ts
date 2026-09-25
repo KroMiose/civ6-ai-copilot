@@ -312,14 +312,14 @@ async function checkLuaLog(inputLog?: string): Promise<DoctorCheck> {
   }
 
   const failedSelfTestDiagnostic = diagnostics.diagnostics.find(
-    (diagnostic) => diagnostic.payload.base64SelfTest === false || diagnostic.payload.sha256SelfTest === false
+    (diagnostic) => diagnostic.payload.base64SelfTest === false
   )?.payload;
   if (failedSelfTestDiagnostic) {
     return {
       id: "lua-log",
       title: "Lua.log diagnostics",
       status: "fail",
-      message: "The Mod loaded, but Lua export self-tests failed.",
+      message: "The Mod loaded, but its Base64 export self-test failed.",
       nextAction: "Do not analyze this snapshot. Share the diagnostic payload and fix Lua compatibility first.",
       details: diagnostics
     };
@@ -357,7 +357,7 @@ async function checkLuaLog(inputLog?: string): Promise<DoctorCheck> {
       title: "Lua.log diagnostics",
       status: "warn",
       message: "The Mod loaded, but no snapshot export was found.",
-      nextAction: "Open the briefing panel in Civ6 and click 汇总本回合.",
+      nextAction: "Open the briefing panel in Civ6 and click 更新战情.",
       details: diagnostics
     };
   }
@@ -368,7 +368,7 @@ async function checkLuaLog(inputLog?: string): Promise<DoctorCheck> {
       title: "Lua.log diagnostics",
       status: "fail",
       message: "Snapshot export markers are present but incomplete or malformed.",
-      nextAction: "Click 汇总本回合 again, then rerun bridge/doctor against the updated Lua.log.",
+      nextAction: "Click 更新战情 again, then rerun bridge/doctor against the updated Lua.log.",
       details: diagnostics
     };
   }
@@ -409,7 +409,7 @@ async function checkLuaLog(inputLog?: string): Promise<DoctorCheck> {
       title: "Lua.log diagnostics",
       status: "fail",
       message: `Bridge could not assemble the latest export: ${(error as Error).message}`,
-      nextAction: "Rerun 汇总本回合 and check for missing chunks or checksum mismatch.",
+      nextAction: "Click 更新战情 again and check for missing or invalid chunks and byteLength errors.",
       details: diagnostics
     };
   }
@@ -447,13 +447,13 @@ async function checkLuaLog(inputLog?: string): Promise<DoctorCheck> {
   if (playerProgressionWarning) {
     warningMessages.push("Player tech/civic progression API is unavailable.");
     nextActions.push(
-      "Core advice can continue, but eureka/inspiration, policy, and route advice may be limited; manually confirm the tech/civic/government screens if this warning persists after Sync Tech/Civics."
+      "Core advice can continue, but eureka/inspiration, policy, and route advice may be limited; click 更新战情, then manually confirm the tech/civic/government screens if this warning persists."
     );
   }
   if (governmentPolicyWarning) {
     warningMessages.push("Government or policy GameInfo API is unavailable.");
     nextActions.push(
-      "Core advice can continue, but government and policy-card advice may be limited; manually confirm the active government and slotted policies if this warning persists after Sync Government/Policies."
+      "Core advice can continue, but government and policy-card advice may be limited; click 更新战情, then manually confirm the active government and slotted policies if this warning persists."
     );
   }
 
@@ -527,12 +527,17 @@ function diagnoseExportCompletionDiagnostic(
       message:
         'Lua.log is missing a matching CIV6_AI_COPILOT_DIAGNOSTIC reason="exported" completion marker for the latest export.',
       nextAction:
-        'Use the current Mod build, click 汇总本回合 again, and confirm Lua.log includes reason="exported" with the same exportId and checksum.'
+        'Use the current Mod build, click 更新战情 again, and confirm Lua.log includes reason="exported" with the same exportId, protocolVersion, chunkCount, and byteLength.'
     };
   }
 
   const payload = completion.payload;
   const mismatches: string[] = [];
+  if (typeof payload.protocolVersion !== "string") {
+    mismatches.push("protocolVersion is missing");
+  } else if (payload.protocolVersion !== latestBegin.protocolVersion) {
+    mismatches.push(`protocolVersion expected ${latestBegin.protocolVersion} but got ${payload.protocolVersion}`);
+  }
   if (typeof payload.exportId !== "string") {
     mismatches.push("exportId is missing");
   } else if (payload.exportId !== latestBegin.exportId) {
@@ -548,17 +553,11 @@ function diagnoseExportCompletionDiagnostic(
   } else if (payload.byteLength !== latestBegin.byteLength) {
     mismatches.push(`byteLength expected ${latestBegin.byteLength} but got ${payload.byteLength}`);
   }
-  if (typeof payload.checksumSha256 !== "string") {
-    mismatches.push("checksumSha256 is missing");
-  } else if (payload.checksumSha256 !== latestBegin.checksumSha256) {
-    mismatches.push(`checksumSha256 expected ${latestBegin.checksumSha256} but got ${payload.checksumSha256}`);
-  }
-
   if (mismatches.length > 0) {
     return {
       status: "fail",
       message: `Latest reason="exported" diagnostic does not match the latest complete export: ${mismatches.join("; ")}.`,
-      nextAction: "Click 汇总本回合 again, then rerun bridge/doctor against the updated Lua.log before analyzing."
+      nextAction: "Click 更新战情 again, then rerun bridge/doctor against the updated Lua.log before analyzing."
     };
   }
 

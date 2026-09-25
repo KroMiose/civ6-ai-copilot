@@ -1,38 +1,43 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const moduleLabels = {
   meta: "元信息",
   localPlayer: "本地玩家",
+  selection: "当前选择",
   cities: "城市运营",
   units: "军事态势",
+  governors: "总督",
+  trade: "商路",
+  cityStates: "已遇见城邦",
   techs: "科技市政",
   civics: "科技市政",
   government: "政体政策",
   policies: "政体政策",
   resources: "资源库存",
   diplomacyPublic: "公开外交",
-  visibleMap: "更新地图情报",
-  notifications: "通知/待办"
+  visibleMap: "地图视野",
+  economy: "资源库存"
 };
 
 const intentRules = [
   {
     id: "war",
-    modules: ["meta", "localPlayer", "cities", "units", "visibleMap", "diplomacyPublic"]
+    modules: ["meta", "localPlayer", "selection", "cities", "units", "visibleMap", "diplomacyPublic"]
   },
   {
     id: "navy",
-    modules: ["meta", "localPlayer", "cities", "units", "visibleMap", "resources", "techs"]
+    modules: ["meta", "localPlayer", "selection", "cities", "units", "visibleMap", "resources", "techs", "trade"]
   },
   {
     id: "exploration",
-    modules: ["meta", "localPlayer", "units", "visibleMap"]
+    modules: ["meta", "localPlayer", "selection", "units", "visibleMap"]
   },
   {
     id: "city-production",
-    modules: ["meta", "localPlayer", "cities", "resources"]
+    modules: ["meta", "localPlayer", "selection", "cities", "resources", "governors", "trade"]
   },
   {
     id: "tech-civic",
@@ -40,19 +45,24 @@ const intentRules = [
   },
   {
     id: "policy",
-    modules: ["meta", "localPlayer", "government", "policies", "resources"]
+    modules: ["meta", "localPlayer", "selection", "government", "policies", "resources", "governors"]
   },
   {
     id: "settling",
-    modules: ["meta", "localPlayer", "cities", "units", "visibleMap", "resources"]
+    modules: ["meta", "localPlayer", "selection", "cities", "units", "visibleMap", "resources"]
+  },
+  {
+    id: "district-planning",
+    modules: ["meta", "localPlayer", "cities", "visibleMap", "resources"]
   },
   {
     id: "turn-priority",
-    modules: ["meta", "localPlayer", "cities", "units", "techs", "civics", "government", "policies", "resources", "diplomacyPublic", "visibleMap"]
+    modules: ["meta", "localPlayer", "selection", "cities", "units", "governors", "trade", "cityStates", "techs", "civics", "government", "policies", "resources", "diplomacyPublic", "economy"]
   }
 ];
 
 const questionRules = [
+  { id: "district-planning", patterns: [/区域/, /选址/, /\bdistrict\b/i] },
   { id: "war", patterns: [/战争/, /开战/, /打仗/, /进攻/, /防守/, /前线/, /围城/, /\bwar\b/i, /\battack\b/i, /\bdefen[cs]e\b/i] },
   { id: "navy", patterns: [/海军/, /舰队/, /港口/, /岛/, /海岸/, /\bnavy\b/i, /\bcoast/i] },
   { id: "exploration", patterns: [/探索/, /侦察/, /探路/, /开图/, /探图/, /勇士/, /斥候/, /走哪/, /往哪里/, /\bexplor/i, /\bscout/i] },
@@ -93,8 +103,14 @@ export function buildSyncSuggestion({ question = "", intents = [], requiredModul
     : question.trim().length > 0
     ? inferRequiredModules(question)
     : inferRequiredModulesForIntents(["turn-priority"]);
-  const availableModules = new Set(Array.isArray(snapshot?.modules) ? snapshot.modules : []);
-  const missingModules = analysis.requiredModules.filter((moduleName) => !availableModules.has(moduleName));
+  const currentModules = new Set((Array.isArray(snapshot?.modules) ? snapshot.modules : []).filter((name) => snapshot.moduleStatus?.[name]?.capturedTurn === snapshot.session?.gameTurn && snapshot.session?.gameTurn !== undefined));
+  const domainModules = new Set(["governors", "trade", "cityStates"]);
+  const availability = (name) => snapshot?.[name]?.availability;
+  const notApplicableModules = analysis.requiredModules.filter((name) => currentModules.has(name) && domainModules.has(name) && availability(name) === "not-applicable");
+  const unavailableModules = analysis.requiredModules.filter((name) => currentModules.has(name) && domainModules.has(name) && availability(name) !== "available" && availability(name) !== "not-applicable");
+  const availableModules = new Set([...currentModules].filter((name) => !domainModules.has(name) || availability(name) === "available"));
+  const limitedUnits = analysis.intents.some((id) => ["war", "navy"].includes(id)) && availableModules.has("units") && snapshot?.moduleStatus?.units?.scope !== "own-and-visible";
+  const missingModules = analysis.requiredModules.filter((moduleName) => !availableModules.has(moduleName) && !notApplicableModules.includes(moduleName));
   const lowConfidenceModules = analysis.requiredModules.filter((moduleName) =>
     availableModules.has(moduleName) && isLowConfidence(moduleConfidence(snapshot, moduleName))
   );
@@ -107,19 +123,23 @@ export function buildSyncSuggestion({ question = "", intents = [], requiredModul
       scenarios: analysis.scenarios,
       requiredModules: analysis.requiredModules,
       missingModules: analysis.requiredModules,
+      unavailableModules: [],
+      notApplicableModules: [],
       lowConfidenceModules: [],
       recommendation:
-        `尚未读取到 snapshot。请先在 Civ6 启用 civ6-ai-copilot Mod，点击左上副官入口打开「战情简报」，点击「汇总本回合」。看到“简报已汇总，可继续由AI副官分析。”和“最近汇总：…”后，重新运行标准入口：npm run copilot -- ${commandArgs} --clean。`
+        `尚未读取到 snapshot。请先在 Civ6 启用 civ6-ai-copilot Mod，点击左上副官入口打开「战情简报」，点击「更新战情」。看到“简报已汇总，可继续由AI副官分析。”和“最近汇总：…”后，重新运行标准入口：npm run copilot -- ${commandArgs} --clean。`
     };
   }
 
-  if (missingModules.length === 0 && lowConfidenceModules.length === 0) {
+  if (missingModules.length === 0 && lowConfidenceModules.length === 0 && !limitedUnits) {
     return {
       ok: true,
       intents: analysis.intents,
       scenarios: analysis.scenarios,
       requiredModules: analysis.requiredModules,
       missingModules: [],
+      unavailableModules: [],
+      notApplicableModules,
       lowConfidenceModules: [],
       recommendation: "当前 snapshot 已覆盖当前分析意图，可以继续分析。"
     };
@@ -127,18 +147,12 @@ export function buildSyncSuggestion({ question = "", intents = [], requiredModul
 
   const labels = [...new Set(missingModules.map((moduleName) => moduleLabels[moduleName] ?? moduleName))];
   const lowConfidenceLabels = [...new Set(lowConfidenceModules.map((moduleName) => moduleLabels[moduleName] ?? moduleName))];
-  const mapWindowOnly = missingModules.includes("visibleMap") && analysis.requiredModules.every((moduleName) =>
-    ["meta", "localPlayer", "units", "visibleMap"].includes(moduleName)
-  );
-  const useMapWindow = missingModules.includes("visibleMap");
-  const action = mapWindowOnly
-    ? "点击「更新地图情报」"
-    : useMapWindow
-    ? "点击「更新地图情报」；如仍需城市运营、科技市政或政体政策信息，再选择对应专题情报"
-    : `选择「${labels.join("」「")}」`;
   const missingText = missingModules.length > 0 ? `当前分析需要 ${labels.join("、")}。` : "当前意图所需情报已声明存在，但部分模块置信度偏低。";
+  const unavailableText = unavailableModules.length > 0
+    ? `本次 ${[...new Set(unavailableModules.map((name) => moduleLabels[name] ?? name))].join("、")} 采集不可用；不能将其当作空结果。`
+    : "";
   const lowConfidenceText = lowConfidenceModules.length > 0
-    ? `；另外 ${lowConfidenceLabels.join("、")} 置信度偏低，请重新汇总对应情报${lowConfidenceModules.includes("visibleMap") ? "或点击「更新地图情报」" : ""}。若置信度仍偏低，我会按低置信度来源处理`
+    ? `；另外 ${lowConfidenceLabels.join("、")} 置信度偏低，刷新后若仍偏低，我会按低置信度来源处理`
     : "";
 
   return {
@@ -147,8 +161,10 @@ export function buildSyncSuggestion({ question = "", intents = [], requiredModul
     scenarios: analysis.scenarios,
     requiredModules: analysis.requiredModules,
     missingModules,
+    unavailableModules,
+    notApplicableModules,
     lowConfidenceModules,
-    recommendation: `${missingText}请在 Civ6 点击左上副官入口打开「战情简报」，${missingModules.length > 0 ? action : "重新汇总对应情报"}${lowConfidenceText}。看到“简报已汇总，可继续由AI副官分析。”和“最近汇总：…”后，重新运行标准入口：npm run copilot -- ${commandArgs} --clean。`
+    recommendation: `${missingText}${unavailableText}请在 Civ6 点击左上副官入口打开「战情简报」，点击「更新战情」${lowConfidenceText}。看到“简报已汇总，可继续由AI副官分析。”和“最近汇总：…”后，重新运行标准入口：npm run copilot -- ${commandArgs} --clean。`
   };
 }
 
@@ -162,7 +178,10 @@ function moduleConfidence(snapshot, moduleName) {
   if (moduleName === "diplomacyPublic") {
     return snapshot.diplomacy?.confidence;
   }
-  return undefined;
+  if (["selection", "governors", "trade", "cityStates"].includes(moduleName)) {
+    return snapshot[moduleName]?.confidence;
+  }
+  return snapshot[moduleName === "policies" ? "government" : moduleName]?.confidence ?? snapshot.confidence?.[moduleName];
 }
 
 function isLowConfidence(confidence) {
@@ -226,6 +245,6 @@ function formatCopilotCommandArgs(intents, modules) {
   ].join(" ");
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   await main();
 }

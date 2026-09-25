@@ -4,26 +4,30 @@
 
 ## 当前版本
 
-- 项目版本：`0.1.1`
-- 兼容版本：`0.1`
-- 协议版本：`0.1.0`
-- Schema 版本：`0.1.0`
+- 项目版本：`0.3.1`
+- 兼容版本：`0.3`
+- 协议版本：`0.3.0`
+- Schema 版本：`0.3.0`
 - 分发目标：GitHub release、Steam Workshop Mod、Agent Skill package、统一 release bundle
 
 版本来源是仓库根目录的 `project-version.json`。Mod、skill、schema 和协议读取同一个版本源，避免在多个文件中硬编码。
+
+0.3.1 扩展了自动回合刷新和面板布局，继续兼容 0.3 数据协议。0.3.0 首批决策数据 contract 保持不变；本版尚未远程发布。Windows/Aspyr 实机验证和双人多人公平测试仍待完成，离线验证不能替代这些手工门槛。
 
 ## 当前能力
 
 - Civ6 被动 InGame UI Mod，`AffectsSavedGames=0`。
 - 左上 LaunchBar 副官入口与中文面板。
-- 「汇总本回合」「更新地图情报」「城市运营」「军事态势」「科技市政」「政体政策」「资源库存」「公开外交」「完整战情简报」。
-- 默认关闭的「回合开始自动汇总」，在本地玩家回合开始后排队复用同一导出路径，并显示扫描、校验和写入进度。
+- 唯一手动完整按钮「更新战情」，刷新所有当前已实现模块。
+- 默认关闭的「每回合自动更新」；开启后每个本地玩家回合刷新全部已实现模块，包含预算限制的可见地图。
 - `Lua.log` marker bridge 与 macOS/Aspyr `tuner-bridge` 读取缓存通道。
 - Snapshot schema、fairness 校验、doctor、preflight、summary、visible map render、handoff。
 - Agent Skill 安装、校验、打包和 Mod-first 情报更新引导。
 - Mod package、skill package、release bundle、manual evidence 和 RC gate。
 
 ## 已验证路径
+
+2026-09-25，0.3.1 本地收尾验证：199/199 自动化测试通过；构建、类型检查、Mod/Skill 校验、RC 自动 gate、离线闭环与隐私检查通过，依赖审计未发现漏洞。普通 Mods 与本地 Workshop 副本已更新为 0.3.1，并逐文件核对安装包；已安装 Skill 校验通过，旧版已备份。游戏内视觉和真实回合行为仍需重启 Civ6 后验证；尚未远程发布。
 
 自动化验证覆盖：
 

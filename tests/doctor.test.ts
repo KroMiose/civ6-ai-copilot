@@ -17,13 +17,12 @@ test("doctor passes repository checks when given a valid Lua.log and snapshot di
     const logPath = path.join(tempDir, "Lua.log");
     const logLines = [
       `CIV6_AI_COPILOT_LOADED version=${VERSION}`,
-      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"sha256SelfTest":true}',
+      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true}',
       ...buildSnapshotLogLinesWithCompletionDiagnostic(snapshot, { exportId: "doctor-export", chunkSize: 256 })
     ];
     await writeFile(logPath, `${logLines.join("\n")}\n`, "utf8");
     await writeSnapshotOutputs(snapshot, path.join(tempDir, "snapshots"), {
-      exportId: "doctor-export",
-      checksumSha256: "fixture-checksum"
+      exportId: "doctor-export"
     });
 
     const report = await runDoctor({
@@ -47,7 +46,7 @@ test("doctor warns when a valid Lua.log export is missing the exported completio
     const logPath = path.join(tempDir, "Lua.log");
     const logLines = [
       `CIV6_AI_COPILOT_LOADED version=${VERSION}`,
-      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"sha256SelfTest":true}',
+      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true}',
       ...buildSnapshotLogLines(snapshot, { exportId: "doctor-missing-completion-export", chunkSize: 256 })
     ];
     await writeFile(logPath, `${logLines.join("\n")}\n`, "utf8");
@@ -80,7 +79,7 @@ test("doctor fails when the exported completion diagnostic does not match the la
     );
     const logLines = [
       `CIV6_AI_COPILOT_LOADED version=${VERSION}`,
-      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"sha256SelfTest":true}',
+      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true}',
       ...snapshotLines
     ];
     await writeFile(logPath, `${logLines.join("\n")}\n`, "utf8");
@@ -106,7 +105,7 @@ test("doctor warns when Mod is loaded but user has not clicked sync", async () =
       logPath,
       [
         `CIV6_AI_COPILOT_LOADED version=${VERSION}`,
-        'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"sha256SelfTest":true}'
+        'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true}'
       ].join("\n"),
       "utf8"
     );
@@ -131,7 +130,7 @@ test("doctor fails when Lua reports the LaunchBar Copilot button could not attac
       logPath,
       [
         `CIV6_AI_COPILOT_LOADED version=${VERSION}`,
-        'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"sha256SelfTest":true}',
+        'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true}',
         'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"launchbar-unavailable"}'
       ].join("\n"),
       "utf8"
@@ -150,7 +149,7 @@ test("doctor fails when Lua reports the LaunchBar Copilot button could not attac
   }
 });
 
-test("doctor fails when Lua export self-tests fail", async () => {
+test("doctor fails when the Lua Base64 export self-test fails", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-doctor-"));
   try {
     const logPath = path.join(tempDir, "Lua.log");
@@ -158,7 +157,7 @@ test("doctor fails when Lua export self-tests fail", async () => {
       logPath,
       [
         `CIV6_AI_COPILOT_LOADED version=${VERSION}`,
-        'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"sha256SelfTest":false}'
+        'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":false}'
       ].join("\n"),
       "utf8"
     );
@@ -183,7 +182,7 @@ test("doctor fails when Civ6 UI runtime objects are unavailable", async () => {
       logPath,
       [
         `CIV6_AI_COPILOT_LOADED version=${VERSION}`,
-        'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"sha256SelfTest":true,"hasControls":false,"hasGame":true,"hasPlayers":true,"hasMap":true}'
+        'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"hasControls":false,"hasGame":true,"hasPlayers":true,"hasMap":true}'
       ].join("\n"),
       "utf8"
     );
@@ -298,7 +297,7 @@ test("doctor warns when visible plot unit API is unavailable but export is valid
     const logPath = path.join(tempDir, "Lua.log");
     const logLines = [
       `CIV6_AI_COPILOT_LOADED version=${VERSION}`,
-      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"sha256SelfTest":true,"hasControls":true,"hasGame":true,"hasPlayers":true,"hasMap":true,"hasUnitsInPlot":false}',
+      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"hasControls":true,"hasGame":true,"hasPlayers":true,"hasMap":true,"hasUnitsInPlot":false}',
       ...buildSnapshotLogLinesWithCompletionDiagnostic(snapshot, {
         exportId: "doctor-visible-units-export",
         chunkSize: 256
@@ -326,7 +325,7 @@ test("doctor warns when player resource API is unavailable but export is valid",
     const logPath = path.join(tempDir, "Lua.log");
     const logLines = [
       `CIV6_AI_COPILOT_LOADED version=${VERSION}`,
-      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"sha256SelfTest":true,"hasControls":true,"hasGame":true,"hasPlayers":true,"hasMap":true,"hasUnitsInPlot":true,"hasPlayerResources":false,"hasGameInfoResources":true}',
+      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"hasControls":true,"hasGame":true,"hasPlayers":true,"hasMap":true,"hasUnitsInPlot":true,"hasPlayerResources":false,"hasGameInfoResources":true}',
       ...buildSnapshotLogLinesWithCompletionDiagnostic(snapshot, {
         exportId: "doctor-resource-api-export",
         chunkSize: 256
@@ -354,7 +353,7 @@ test("doctor warns when tech or civic progression API is unavailable but export 
     const logPath = path.join(tempDir, "Lua.log");
     const logLines = [
       `CIV6_AI_COPILOT_LOADED version=${VERSION}`,
-      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"sha256SelfTest":true,"hasControls":true,"hasGame":true,"hasPlayers":true,"hasMap":true,"hasUnitsInPlot":true,"hasPlayerResources":true,"hasGameInfoResources":true,"hasPlayerTechs":false,"hasGameInfoTechnologies":true,"hasPlayerCulture":true,"hasGameInfoCivics":true}',
+      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"hasControls":true,"hasGame":true,"hasPlayers":true,"hasMap":true,"hasUnitsInPlot":true,"hasPlayerResources":true,"hasGameInfoResources":true,"hasPlayerTechs":false,"hasGameInfoTechnologies":true,"hasPlayerCulture":true,"hasGameInfoCivics":true}',
       ...buildSnapshotLogLinesWithCompletionDiagnostic(snapshot, {
         exportId: "doctor-progression-api-export",
         chunkSize: 256
@@ -382,7 +381,7 @@ test("doctor warns when government or policy GameInfo API is unavailable but exp
     const logPath = path.join(tempDir, "Lua.log");
     const logLines = [
       `CIV6_AI_COPILOT_LOADED version=${VERSION}`,
-      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"sha256SelfTest":true,"hasControls":true,"hasGame":true,"hasPlayers":true,"hasMap":true,"hasUnitsInPlot":true,"hasPlayerResources":true,"hasGameInfoResources":true,"hasPlayerTechs":true,"hasGameInfoTechnologies":true,"hasPlayerCulture":true,"hasGameInfoCivics":true,"hasGameInfoGovernments":false,"hasGameInfoPolicies":true,"hasGameInfoGovernmentSlots":true}',
+      'CIV6_AI_COPILOT_DIAGNOSTIC {"reason":"loaded","base64SelfTest":true,"hasControls":true,"hasGame":true,"hasPlayers":true,"hasMap":true,"hasUnitsInPlot":true,"hasPlayerResources":true,"hasGameInfoResources":true,"hasPlayerTechs":true,"hasGameInfoTechnologies":true,"hasPlayerCulture":true,"hasGameInfoCivics":true,"hasGameInfoGovernments":false,"hasGameInfoPolicies":true,"hasGameInfoGovernmentSlots":true}',
       ...buildSnapshotLogLinesWithCompletionDiagnostic(snapshot, {
         exportId: "doctor-government-policy-api-export",
         chunkSize: 256

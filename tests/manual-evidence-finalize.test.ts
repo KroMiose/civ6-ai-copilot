@@ -102,6 +102,7 @@ test("manual evidence validation rejects real evidence with placeholder metadata
 async function writeBridgeFixture(tempDir: string): Promise<{ luaLogPath: string; snapshotDir: string; latestPath: string }> {
   const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
   snapshot.exportedAt = new Date().toISOString();
+  for (const status of Object.values(snapshot.moduleStatus) as { capturedAt: string }[]) status.capturedAt = snapshot.exportedAt;
   const luaLogPath = path.join(tempDir, "Lua.log");
   const snapshotDir = path.join(tempDir, "snapshots");
   const lines = [
@@ -110,9 +111,7 @@ async function writeBridgeFixture(tempDir: string): Promise<{ luaLogPath: string
       modVersion: VERSION,
       protocolVersion: PROTOCOL_VERSION,
       reason: "manual-evidence-finalize-test",
-      hasBitlib: true,
       base64SelfTest: true,
-      sha256SelfTest: true,
       hasControls: true,
       hasGame: true,
       hasPlayers: true,

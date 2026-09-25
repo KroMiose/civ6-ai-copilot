@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 import { runFairnessChecks, type FairnessIssue } from "./fairness.js";
+import { moduleContractErrors, type ModuleSnapshot } from "./module-cache.js";
 
 export interface SnapshotValidationResult {
   ok: boolean;
@@ -24,10 +25,12 @@ export async function validateSnapshotFile(snapshotPath: string): Promise<Snapsh
 
 export async function validateSnapshotObject(snapshot: unknown): Promise<SnapshotValidationResult> {
   const validate = await getValidator();
-  const schemaOk = validate(snapshot);
-  const schemaErrors = schemaOk
+  const shapeOk = validate(snapshot);
+  const schemaErrors = shapeOk
     ? []
     : (validate.errors ?? []).map((error: ErrorObject) => `${error.instancePath || "$"} ${error.message ?? "is invalid"}`);
+  if (shapeOk) schemaErrors.push(...moduleContractErrors(snapshot as ModuleSnapshot));
+  const schemaOk = schemaErrors.length === 0;
   const fairnessIssues = runFairnessChecks(snapshot);
   const fairnessOk = fairnessIssues.length === 0;
 

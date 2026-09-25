@@ -79,6 +79,13 @@ export async function runOfflineSmoke(options: OfflineSmokeOptions): Promise<Off
   try {
     const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
     snapshot.exportedAt = new Date().toISOString();
+    if (snapshot.moduleStatus && typeof snapshot.moduleStatus === "object" && !Array.isArray(snapshot.moduleStatus)) {
+      for (const capture of Object.values(snapshot.moduleStatus) as Array<Record<string, unknown>>) {
+        if (capture && typeof capture === "object") {
+          capture.capturedAt = snapshot.exportedAt;
+        }
+      }
+    }
     const lines = [
       "[Civ6] offline smoke fake Lua.log",
       `${COPILOT_LOADED} version=${VERSION}`,
@@ -86,9 +93,7 @@ export async function runOfflineSmoke(options: OfflineSmokeOptions): Promise<Off
         modVersion: VERSION,
         protocolVersion: PROTOCOL_VERSION,
         reason: "offline-smoke",
-        hasBitlib: true,
         base64SelfTest: true,
-        sha256SelfTest: true,
         hasControls: true,
         hasGame: true,
         hasPlayers: true,

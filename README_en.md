@@ -36,14 +36,14 @@ Please update my civ6-ai-copilot skill and local helper tools to the latest vers
 
 1. Enter a Civ6 game.
 2. Click the Copilot entry in the upper-left UI.
-3. In the briefing panel, choose the full turn briefing action.
+3. In the briefing panel, click **Update Briefing** to refresh the full briefing.
 4. Return to your agent and send:
 
 ```text
 I just summarized this Civ6 turn in the briefing panel. Please use the civ6-ai-copilot skill to read the latest briefing and tell me what I should do this turn.
 ```
 
-If your agent says a type of information is missing, return to the briefing panel, click the action it asks for, then continue the conversation.
+If your agent says a type of information is missing, return to the briefing panel and click **Update Briefing**, then continue the conversation.
 
 ## What to Ask
 
@@ -69,16 +69,7 @@ Is the coast east of my capital, the river area, or the small southern island go
 
 ## When Information Is Missing
 
-The agent will tell you which briefing information it needs. Return to Civ6, open the briefing panel, and follow the requested action:
-
-- `Update map intel`: map, front line, navy, scouting, settling, and war decisions.
-- `City operations`: production, housing, districts, and yields by city.
-- `Military posture`: unit actions, defense, and troop movement.
-- `Tech and civics`: technology, civic, Eureka, and Inspiration routes.
-- `Government and policies`: government, policy slots, and active policy cards.
-- `Resources`: strategic resources, luxuries, upgrades, maintenance, and trades.
-- `Public diplomacy`: met civilizations, public relationships, and public military scores.
-- `Full turn briefing`: first use, version changes, diagnostic issues, or multiple topics that need refreshing.
+The agent will explain which information is missing and how that limits its answer. Return to Civ6 and click **Update Briefing** to refresh the full briefing, including the visible map, your cities and units, governors, trade routes, and met city-states. **Auto-update each turn** is off by default; when enabled, it refreshes the same information at the start of each local-player turn.
 
 ## Multiplayer
 
@@ -92,4 +83,4 @@ If your multiplayer room restricts UI or utility Mods, follow the room rules fir
 
 - [Developer and maintainer docs](docs/README.md)
 
-Current version: `0.1.1`.
+Repository version: `0.3.1` (not released yet).

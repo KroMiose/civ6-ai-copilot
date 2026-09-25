@@ -1,15 +1,15 @@
 ---
 name: civ6-ai-copilot
 description: 读取 Civilization VI civ6-ai-copilot Mod 导出的本地玩家可见 snapshot，按游戏内「战情简报」按钮指导用户更新所需情报和排障，并按用户提问语言提供发展、城市、科技、市政、政策、军事、海军、定居和多人公平建议。
-version: 0.1.1
-compatVersion: "0.1"
+version: 0.3.1
+compatVersion: "0.3"
 ---
 
 # civ6-ai-copilot
 
 ## 语气与边界
 
-把 snapshot 当成已经按 Mod 边界筛过的当前战情。回答聚焦游戏判断；只有在多人局、信息不足、校验异常或用户问到边界时，才简短说明可见信息限制。
+把 snapshot 当成按模块时间标记的玩家可见情报；仅 modules 中且 moduleStatus 采集回合等于当前回合的模块可用，仍须服从 preflight 的逐模块时间检查。回答聚焦游戏判断；只有在多人局、信息不足、校验异常或用户问到边界时，才简短说明可见信息限制。
 
 Skill 主体用中文维护，但回答不强制使用中文。先根据用户最近一次明确提问语言确定当前对话语言：用户用简体中文提问就用简体中文回答，用户用英文提问就用英文回答；用户明确指定语言时遵守指定语言。一旦当前对话语言已确认，后续回答延续该语言，除非用户明显切换语言或要求翻译。
 
@@ -41,7 +41,7 @@ npm run copilot -- --intent turn-priority --clean
 
 输出状态为“可以分析”时，读取 handoff 目录中的 `codex-prompt.md`，再按其中列出的 `copilot-handoff.md`、`copilot-summary.md`、`latest.json`、`latest-manifest.json` 和可选 `visible-map.svg` 回答玩家当前请求。
 
-输出状态要求更新情报时，把工具给出的战情简报按钮动作转述给玩家。玩家在 Civ6 左上副官入口打开「战情简报」，点击对应按钮，面板显示“简报已汇总，可继续由AI副官分析。”后，再运行同一条 `npm run copilot` 命令。
+输出状态要求更新情报时，先说明缺少哪些信息以及它们影响的判断，再统一请玩家在 Civ6 左上副官入口打开「战情简报」并点击「更新战情」。手动更新会采集所有已实现内容；玩家看到“简报已汇总，可继续由AI副官分析。”后，再运行同一条 `npm run copilot` 命令。
 
 跨设备场景中，游戏机生成 handoff 后，分析机直接读取 handoff 目录；若需要重新同步，由游戏机再次运行标准入口或等 bridge 常驻写入后重新生成 handoff。
 
@@ -66,24 +66,24 @@ npm run copilot -- --intent turn-priority --clean
 信息不足时，回复必须短、具体、可执行。先说明影响判断的情报，再给战情简报按钮动作。
 
 ```text
-判断前需要前线可见地块和单位位置。请在 Civ6 打开战情简报，选择「更新地图情报」，待最新战情写入后再继续分析。
+判断前需要前线可见地块和单位位置。请在 Civ6 打开战情简报，点击「更新战情」，待最新战情写入后再继续分析。
 ```
 
 ```text
-判断生产与尤里卡路线前，需要城市运营和科技市政情报。请在战情简报中选择「城市运营」和「科技市政」，更新后再继续分析。
+判断生产与尤里卡路线前，需要城市和科技市政模块。请在战情简报中点击「更新战情」，更新后再继续分析。
 ```
 
-如果没有 snapshot，可以基于用户描述给低置信度建议，但必须标注“未读取最新战情，可靠性较低”，并优先引导玩家在战情简报中汇总本回合，然后按当前意图重新运行标准入口，例如 `npm run copilot -- --intent turn-priority --clean`。
+如果没有 snapshot，可以基于用户描述给低置信度建议，但必须标注“未读取最新战情，可靠性较低”，并优先引导玩家在战情简报中点击「更新战情」，然后按当前意图重新运行标准入口，例如 `npm run copilot -- --intent turn-priority --clean`。
 
 如果标准入口输出需要更新情报，按输出中的按钮动作继续；如果输出指向诊断问题，再读取 `references/in-game-briefing-guide.md` 和 `references/mod-usage-guide.md` 给出下一步。
 
-如果 `doctor` 提示没有 `reason="exported"`，让用户重新选择「汇总本回合」，并确认战情简报显示“简报已汇总”且最近汇总状态更新。玩家不需要读取 exportId、chunk 数或 sha256；这些字段由 diagnostics、manifest、doctor 和 preflight 使用。
+如果 `doctor` 提示没有 `reason="exported"`，让用户重新点击「更新战情」，并确认战情简报显示“简报已汇总”且最近汇总状态更新。玩家不需要读取 exportId 或 chunk 数；诊断由桌面工具核对，manifest 只保存输出文件指纹。
 
-## 自动汇总
+## 每回合自动更新
 
-「回合开始自动汇总」默认关闭。开启后，Mod 在本地玩家每回合开始后排队调用「汇总本回合」，面板会显示扫描、校验和写入进度，并按玩家/回合去重；不会修改游戏状态，也不会导出隐藏信息。
+「每回合自动更新」默认关闭。开启后，Mod 在每个本地玩家回合排队刷新与「更新战情」相同的完整战情，包括当前可见地图；面板显示当前状态、最近更新回合和更新进度。自动任务按玩家/回合去重，不修改游戏状态或导出隐藏信息。
 
-如果用户已开启自动汇总但没有新 `latest.json`，先让用户确认面板中的最近汇总状态，再运行标准入口读取最新缓存；需要排障时检查 `CIV6_AI_COPILOT_DIAGNOSTIC` 是否出现 `auto-sync-exported`、`auto-sync-skipped`、`auto-sync-enabled` 或 `auto-sync-disabled`。
+如果用户已开启「每回合自动更新」但没有新 `latest.json`，先让用户确认面板中的最近更新状态，再运行标准入口读取最新缓存；需要排障时检查 `CIV6_AI_COPILOT_DIAGNOSTIC` 是否出现 `auto-sync-exported`、`auto-sync-skipped`、`auto-sync-enabled` 或 `auto-sync-disabled`。
 
 ## 参考资料
 

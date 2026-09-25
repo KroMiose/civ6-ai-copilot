@@ -44,11 +44,22 @@ export function runFairnessChecks(snapshot: unknown): FairnessIssue[] {
         message: "non-local units must be currently visible"
       });
     }
+    if (!isOwnUnit) {
+      for (const key of [
+        "movesRemaining", "maxMoves", "range", "buildCharges", "experience", "experienceForNextLevel",
+        "level", "promotions", "militaryFormation", "upgradeCost", "canAct", "canPromote"
+      ]) {
+        if (key in unit) issues.push({ path: `$.units[${index}].${key}`, message: "foreign unit private action/experience state must not be exported" });
+      }
+    }
   }
 
   const cities = Array.isArray(root.cities) ? root.cities : [];
   for (const [index, value] of cities.entries()) {
     const city = asRecord(value);
+    if (city && city.ownerPlayerId !== localPlayerId) {
+      issues.push({ path: `$.cities[${index}]`, message: "city operations are local-player-only" });
+    }
     const production = asRecord(city?.currentProduction);
     if (!production) {
       continue;
@@ -86,6 +97,20 @@ export function runFairnessChecks(snapshot: unknown): FairnessIssue[] {
         message: "tiles with units must be currently visible"
       });
     }
+    if (tile.visibleNow !== true) {
+      // 0.2 conservatively exports only explored coordinates in fog. Terrain and
+      // features can change in disasters; no current Plot-derived fact is safe.
+      const allowed = new Set(["source", "visibility", "confidence", "x", "y", "revealed", "visibleNow"]);
+      for (const key of Object.keys(tile)) {
+        if (!allowed.has(key)) issues.push({ path: `$.visibleMap.tiles[${index}].${key}`, message: "fog tiles must not expose current Plot state" });
+      }
+    }
+    if (tile.resourceAmount !== undefined && typeof tile.resourceType !== "string") {
+      issues.push({ path: `$.visibleMap.tiles[${index}].resourceAmount`, message: "resource amount requires an identified visible resource type" });
+    }
+    if (tile.visibility !== (tile.visibleNow === true ? "visible-now" : "revealed")) {
+      issues.push({ path: `$.visibleMap.tiles[${index}].visibility`, message: "tile visibility must match visibleNow" });
+    }
     if (typeof tile.terrainType === "string" && /^-?\d+$/.test(tile.terrainType)) {
       issues.push({
         path: `$.visibleMap.tiles[${index}].terrainType`,
@@ -104,6 +129,11 @@ export function runFairnessChecks(snapshot: unknown): FairnessIssue[] {
         message: "resourceType must be a visible RESOURCE_* identifier, not a raw plot resource index"
       });
     }
+  }
+
+  for (const key of ["localPlayer", "techs", "civics", "government", "resources", "economy"]) {
+    const value = asRecord(root[key]);
+    if (value && value.visibility !== "own") issues.push({ path: `$.${key}.visibility`, message: "private modules must be own-player data" });
   }
 
   const metPlayers = asRecord(root.diplomacy);

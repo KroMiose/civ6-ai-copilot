@@ -28,15 +28,22 @@
 | D-003 | 数据边界 | 默认 `visibilityMode: "player-visible"`，只导出本地玩家理论可见信息。 |
 | D-004 | 传输路径 | 标准入口 `npm run copilot` 按平台选择传输：Windows/有日志走 `Lua.log` marker + `bridge`；macOS/Aspyr 走 `tuner-bridge` 读取 Mod 缓存。 |
 | D-005 | 游戏内交互 | 左上 LaunchBar 副官入口，中文面板，稳定按钮名。 |
-| D-006 | 情报粒度 | 手动为主，按问题更新指定模块；「回合开始自动汇总」默认关闭。 |
+| D-006 | 情报粒度 | 手动为主；按问题分析已采集模块。「每回合自动更新」默认关闭。 |
 | D-007 | 版本规则 | 使用 `a.b.c`。`a.b` 是 skill + Mod 兼容组合，`c` 是不破坏兼容的修复。 |
 | D-008 | 工具链 | Lua for Mod；TypeScript/Node for CLI、schema、package、release；research 不作为运行时依赖。 |
 | D-009 | Skill 行为 | Skill 优先运行标准入口并读取其 handoff 产物；信息不足时给出具体战情简报动作。 |
 | D-010 | 玩家位置表达 | 坐标用于内部分析和 SVG；面向玩家默认使用相对位置和可见锚点。 |
 | D-011 | 发布渠道 | GitHub release、Steam Workshop、Agent Skill package、统一 release bundle。 |
 | D-012 | 产品语言 | 用户可见文字遵循 `docs/product-language.md`：克制、专业、游戏内战情语境；README 提供简体中文和英文入口；Skill 按用户提问语言回答并使用对应 Civ6 本地化术语。 |
-| D-013 | 地图规划字段 | `visibleMap.tiles` 导出已揭示/当前可见地块的规划事实：地形、地貌、可见资源、河流边、淡水、丘陵/山脉/水域/悬崖、改良、路线、区域、吸引力和基础产出；字段缺失表示当前 API 未提供或当前玩家不可识别，不代表事实不存在。 |
-| D-014 | 汇总性能 | 地图扫描、checksum 校验和日志分块输出必须通过 UI update 分帧执行，并在面板显示进度；base64 只按当前输出 chunk 现算，自动汇总只排队任务，不在回合开始事件里同步跑完整导出。 |
+| D-013 | 地图规划字段 | `visibleMap.tiles` 仅在当前可见地块导出规划事实：地形、地貌、可见资源、河流边、淡水、丘陵/山脉/水域/悬崖、改良、路线、区域、吸引力和基础产出；字段缺失表示当前 API 未提供或当前玩家不可识别，不代表事实不存在。 |
+| D-014 | 汇总性能 | 地图扫描和日志分块输出通过 UI update 分帧执行；删除 sender SHA/hash phase，每帧输出 64 chunks。完整更新的采集范围由 D-020/D-021 规定，手动和自动完整更新均包含预算限制的可见地图；分帧与地图预算机制仍适用。 |
+| D-015 | 0.2 协议（所有者本轮确认） | 正式删除 transport checksum 和 localPlayerNameHash；Node manifest 的 checksumSha256 仅为 latest.json 文件指纹。 |
+| D-016 | 专题刷新（所有者本轮授权） | moduleStatus 逐模块记录 capturedTurn/capturedAt/exportId；同 session、同玩家、同回合整模块替换/合并，跨回合移除旧 payload，仅保留过期采集记录。Mod 缓存累积当前回合模块，保证 tuner 只读取最后一次缓存时不丢专题。 |
+| D-017 | 迷雾与采样（所有者本轮确认） | 不从迷雾中的当前 Plot 读取动态状态；资源数量须同时满足当前可见且资源类型已识别。地图限额优先分配当前视野和己方单位/城市附近；详细 getter 仅用于入选地块。 |
+| D-018 | 决策数据（所有者本轮授权） | 仅添加有原生 UI 调用依据的己方城市、单位、研究、政策和经济字段；不可用字段省略，不伪装为零。移除未实现 notifications 模块。摘要按确定性行动优先级排序。 |
+| D-019 | 会话与偏好 | exportId 独立唯一；无法证明跨载入稳定的游戏 ID 时使用明确标注的本次载入 session，不以地图种子或回合号冒充游戏 ID；跨载入趋势及偏好持久化待验证。 |
+| D-020 | 首批决策数据（所有者已确认） | 手动入口统一为「更新战情」并采集完整已实现模块。补己方选择上下文、城市基础设施/生产/粮食、单位状态、总督、商路和已遇见城邦使者；仅使用有原生 UI 依据的只读接口，缺失与不适用明确表达。同步升级 0.3 contract、Skill 和验证；不包含第二批复杂行动枚举或自动游戏操作。自动更新范围由 D-021 覆盖。 |
+| D-021 | 完整自动更新与面板整理（所有者本轮授权） | 根据实机速度反馈，开启自动更新后每个己方回合刷新全部已实现模块，包含有预算限制的可见地图，与手动更新采用相同采集范围；覆盖 D-014/D-020 的轻量自动路径，保留默认关闭、延迟执行、回合去重、忙碌保护和跨回合取消。面板统一内容边界与按钮样式，压缩空白，仅呈现更新状态、采集回合、进度和玩家操作；实现术语保留在诊断与开发文档，不展示给玩家。不改变多人可见性边界，不新增无界地图扫描。 |
 
 影响这些决策的变更需要先更新本表或新增 ADR，再进入实现。
 
@@ -61,7 +68,7 @@ flowchart LR
 分层职责：
 
 - `mod/`：在 Civ6 UI 环境中收集并导出本地玩家理论可见信息。
-- `tools/bridge/`：解析 `Lua.log` marker，校验 checksum、schema 和 fairness。
+- `tools/bridge/`：解析 `Lua.log` marker，校验分块结构、schema 和 fairness。
 - `tools/tuner-bridge/`：读取 Mod 已缓存的同一份 marker 分块，用于没有 `Lua.log` 的环境。
 - `schemas/`：定义 snapshot contract。
 - `tools/copilot/`：标准入口、preflight、summary、handoff 和 AI 交接材料。
@@ -119,10 +126,10 @@ flowchart LR
 
 ```json
 {
-  "version": "0.1.1",
-  "compatVersion": "0.1",
-  "protocolVersion": "0.1.0",
-  "schemaVersion": "0.1.0"
+  "version": "0.3.1",
+  "compatVersion": "0.3",
+  "protocolVersion": "0.3.0",
+  "schemaVersion": "0.3.0"
 }
 ```
 
@@ -136,24 +143,21 @@ flowchart LR
 
 ## UI 与 Skill 契约
 
+手动完整刷新通过「更新战情」触发；可选的「每回合自动更新」默认关闭，开启后每个己方回合同样刷新全部已实现模块和预算限制地图。意图和模块 key 是内部能力名，不对应玩家可点击的专题按钮。
+
 稳定按钮/模块名：
 
 | UI 名称 | 模块键 | 用途 |
 |---|---|---|
-| 汇总本回合 | `turn` | 本回合基础上下文 |
-| 更新地图情报 | `visibleMap` | 战争、海军、定居、前线、资源岛 |
-| 城市运营 | `cities` | 逐城生产、区域、住房、产出 |
-| 军事态势 | `units` | 战争、防守、探索、单位行动 |
-| 科技市政 | `techs`, `civics` | 尤里卡、鼓舞、路线规划 |
-| 政体政策 | `government`, `policies` | 换卡、政策槽、爆发回合 |
-| 资源库存 | `resources` | 战略资源、奢侈品、升级、交易 |
-| 公开外交 | `diplomacyPublic` | 战争风险、已遇见文明、公开分数 |
-| 完整战情简报 | `full` | 首次使用、诊断、版本变化后重建上下文 |
+| 更新战情 | `full` | 手动完整刷新所有已实现模块，包含地图 |
+| 每回合自动更新 | `full` + `auto-turn` | 默认关闭；开启后每个本地玩家回合刷新所有已实现模块和预算限制地图 |
+
+内部模块包括 `selection`、`cities`、`units`、`governors`、`trade`、`cityStates`、`techs`、`civics`、`government`、`policies`、`resources`、`diplomacyPublic`、`visibleMap` 和 `economy`。城市/单位等模块用于意图分析和有界摘要，玩家只需通过「更新战情」刷新。
 
 Skill 判断信息不足时应输出具体动作，例如：
 
 ```text
-判断前需要前线可见地块和单位位置。请打开战情简报，点击「更新地图情报」，等 bridge 刷新 latest.json 后再判断是否开战。
+判断前需要前线可见地块和单位位置。请打开战情简报，点击「更新战情」，等 bridge 刷新 latest.json 后再判断是否开战。
 ```
 
 ## 测试策略
@@ -161,7 +165,7 @@ Skill 判断信息不足时应输出具体动作，例如：
 自动化测试覆盖：
 
 - schema/fairness validation
-- bridge marker parser、checksum、writer manifest
+- bridge marker parser、分块完整性、writer manifest 文件指纹
 - tuner-bridge fake socket
 - preflight/summarize/handoff
 - map renderer

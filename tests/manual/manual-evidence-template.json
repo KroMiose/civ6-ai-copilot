@@ -1,6 +1,6 @@
 {
   "$schema": "../../schemas/manual-evidence.schema.json",
-  "schemaVersion": "0.1.0",
+  "schemaVersion": "0.3.0",
   "evidenceKind": "template",
   "recordedAt": "1970-01-01T00:00:00.000Z",
   "modVersion": "fill-after-real-test",
@@ -21,7 +21,6 @@
     "playersApiAvailable": false,
     "mapApiAvailable": false,
     "base64SelfTest": false,
-    "sha256SelfTest": false,
     "hasUnitsInPlot": false,
     "hasPlayerResources": false,
     "hasPlayerProgression": false,

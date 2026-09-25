@@ -70,7 +70,7 @@ test("copilot handoff asks for Copilot panel sync when intent modules are missin
 
     const handoffJson = JSON.parse(await readFile(path.join(outputDir, "copilot-handoff.json"), "utf8"));
     assert.equal(handoffJson.readyForCopilot, false);
-    assert.deepEqual(handoffJson.summary.syncAdvice.missingModules.sort(), ["government", "policies", "resources"].sort());
+    assert.deepEqual(handoffJson.summary.syncAdvice.missingModules.sort(), ["government", "governors", "policies", "resources", "selection"].sort());
   } finally {
     await rm(sourceDir, { recursive: true, force: true });
     await rm(outputDir, { recursive: true, force: true });
@@ -88,6 +88,7 @@ async function writeFixtureLatestWithManifest(
     exportId
   };
   snapshot.exportedAt = new Date().toISOString();
+  for (const capture of Object.values(snapshot.moduleStatus ?? {}) as Array<{ capturedAt: string }>) capture.capturedAt = snapshot.exportedAt as string;
   mutate?.(snapshot);
 
   const latestPath = path.join(outputDir, "latest.json");
@@ -99,6 +100,7 @@ async function writeFixtureLatestWithManifest(
     `${JSON.stringify(
       {
         exportId,
+        checksumScope: "latest-json-file",
         checksumSha256: createHash("sha256").update(Buffer.from(jsonText, "utf8")).digest("hex"),
         latestPath,
         snapshotPath: latestPath,

@@ -94,8 +94,7 @@ export async function runBridgeOnce(options: BridgeRunOptions): Promise<BridgeRu
     }
 
     const written = await writeSnapshotOutputs(assembled.snapshot, options.outputDir, {
-      exportId: assembled.exportId,
-      checksumSha256: assembled.checksumSha256
+      exportId: assembled.exportId
     });
 
     return {

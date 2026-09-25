@@ -48,7 +48,7 @@ test("copilot preflight asks for panel sync when intent modules are missing", as
     assert.equal(report.canAnalyze, false);
     assert.equal(report.exitCode, 2);
     assert.equal(report.checks.syncOk, false);
-    assert.deepEqual(report.summary?.syncAdvice.missingModules.sort(), ["government", "policies", "resources"].sort());
+    assert.deepEqual(report.summary?.syncAdvice.missingModules.sort(), ["selection", "government", "policies", "resources", "governors"].sort());
   } finally {
     await rm(outputDir, { recursive: true, force: true });
   }
@@ -192,14 +192,36 @@ test("copilot preflight points to the standard entry when no snapshot is configu
   assert.equal(report.nextActions.some((action) => action.includes("--intent")), true);
 });
 
+test("preflight does not block not-applicable domain modules but blocks unavailable ones", async () => {
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-preflight-availability-"));
+  try {
+    const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
+    snapshot.governors.availability = "not-applicable";
+    await writeLatestWithManifest(outputDir, snapshot);
+    const notApplicable = await runCopilotPreflight({ snapshotDir: outputDir, requiredModules: ["governors"] });
+    assert.equal(notApplicable.canAnalyze, true, JSON.stringify(notApplicable, null, 2));
+    assert.equal(notApplicable.summary?.syncAdvice.notApplicableModules.includes("governors"), true);
+
+    snapshot.governors.availability = "unavailable";
+    snapshot.governors.governors = [];
+    await writeLatestWithManifest(outputDir, snapshot);
+    const unavailable = await runCopilotPreflight({ snapshotDir: outputDir, requiredModules: ["governors"] });
+    assert.equal(unavailable.canAnalyze, false);
+    assert.equal(unavailable.summary?.syncAdvice.unavailableModules.includes("governors"), true);
+    assert.match(unavailable.nextActions.join(" "), /更新战情/);
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
 async function writeFixtureBridgeOutput(outputDir: string, exportId: string): Promise<void> {
   const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
   snapshot.exportedAt = new Date().toISOString();
+  for (const capture of Object.values(snapshot.moduleStatus ?? {}) as Array<{ capturedAt: string }>) capture.capturedAt = snapshot.exportedAt as string;
   const logContent = buildSnapshotLogLines(snapshot, { exportId, chunkSize: 128 }).join("\n");
   const assembled = assembleLatestCompleteExport(parseLogContent(logContent));
   await writeSnapshotOutputs(assembled.snapshot, outputDir, {
-    exportId: assembled.exportId,
-    checksumSha256: assembled.checksumSha256
+    exportId: assembled.exportId
   });
 }
 
@@ -210,6 +232,7 @@ async function writeLatestWithManifest(
 ): Promise<void> {
   if (options.refreshExportedAt !== false) {
     snapshot.exportedAt = new Date().toISOString();
+  for (const capture of Object.values(snapshot.moduleStatus ?? {}) as Array<{ capturedAt: string }>) capture.capturedAt = snapshot.exportedAt as string;
   }
   const latestPath = path.join(outputDir, "latest.json");
   const manifestPath = path.join(outputDir, "latest-manifest.json");
@@ -220,6 +243,7 @@ async function writeLatestWithManifest(
     `${JSON.stringify(
       {
         exportId: "fixture-export-0001",
+        checksumScope: "latest-json-file",
         checksumSha256: createHash("sha256").update(Buffer.from(jsonText, "utf8")).digest("hex"),
         latestPath,
         snapshotPath: latestPath,

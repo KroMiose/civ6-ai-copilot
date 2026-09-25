@@ -52,7 +52,6 @@ const windowsRequiredTrueFlags = [
   "playersApiAvailable",
   "mapApiAvailable",
   "base64SelfTest",
-  "sha256SelfTest",
   "bridgeLatestJson",
   "preflightPassed",
   "validatePassed",

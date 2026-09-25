@@ -19,7 +19,7 @@
     },
     "schemaVersion": {
       "type": "string",
-      "const": "0.1.0"
+      "const": "0.3.0"
     },
     "evidenceKind": {
       "type": "string",
@@ -55,7 +55,6 @@
         "playersApiAvailable",
         "mapApiAvailable",
         "base64SelfTest",
-        "sha256SelfTest",
         "hasUnitsInPlot",
         "hasPlayerResources",
         "hasPlayerProgression",
@@ -116,9 +115,6 @@
           "type": "boolean"
         },
         "base64SelfTest": {
-          "type": "boolean"
-        },
-        "sha256SelfTest": {
           "type": "boolean"
         },
         "hasUnitsInPlot": {

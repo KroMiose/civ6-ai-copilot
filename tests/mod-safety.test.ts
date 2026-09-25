@@ -11,11 +11,16 @@ const modThumbnailPath = path.resolve("mod/thumbnail.png");
 
 test("modinfo registers a passive InGame UI context and required files", async () => {
   const modInfo = await readFile(modInfoPath, "utf8");
+  const lua = await readFile(modLuaPath, "utf8");
 
   assert.match(modInfo, /<AffectsSavedGames>0<\/AffectsSavedGames>/);
   assert.match(modInfo, /<AddUserInterfaces[^>]*id="CIV6_AI_COPILOT_UI"/);
   assert.match(modInfo, /<UpdateText[^>]*id="CIV6_AI_COPILOT_TEXT"/);
   assert.match(modInfo, /<Context>InGame<\/Context>/);
+  assert.match(lua, /local MOD_VERSION = "0\.3\.1"/);
+  assert.match(lua, /local COMPAT_VERSION = "0\.3"/);
+  assert.match(lua, /local SCHEMA_VERSION = "0\.3\.0"/);
+  assert.match(lua, /local PROTOCOL_VERSION = "0\.3\.0"/);
   assert.match(modInfo, /<AddUserInterfaces[^>]*id="CIV6_AI_COPILOT_UI"[\s\S]*?<File>ui\/civ6_ai_copilot\.xml<\/File>[\s\S]*?<\/AddUserInterfaces>/);
   assert.match(modInfo, /<File>ui\/civ6_ai_copilot\.lua<\/File>/);
   assert.match(modInfo, /<File>ui\/civ6_ai_copilot\.xml<\/File>/);
@@ -40,28 +45,17 @@ test("modinfo injects the Copilot XML directly so Civ6 loads the paired Lua cont
 
 test("mod xml exposes stable Copilot controls used by Lua and skill guidance", async () => {
   const xml = await readFile(modXmlPath, "utf8");
+  const text = await readFile(modTextPath, "utf8");
 
   for (const id of [
     "CopilotButton",
     "CopilotButtonLabel",
     "XmlLoadedLabel",
     "CopilotPanel",
-    "SubtitleLabel",
     "StatusLabel",
     "LastExportLabel",
     "AutoSyncButton",
-    "AutoSyncStatusLabel",
-    "BridgeHintLabel",
-    "SyncTurnButton",
-    "SyncMapButton",
-    "SelectiveSyncLabel",
-    "SyncCitiesButton",
-    "SyncUnitsButton",
-    "SyncTechCivicsButton",
-    "SyncGovernmentButton",
-    "SyncResourcesButton",
-    "SyncDiplomacyButton",
-    "ForceFullButton",
+    "UpdateBriefButton",
     "CloseButton"
   ]) {
     assert.match(xml, new RegExp(`ID="${id}"`));
@@ -77,7 +71,15 @@ test("mod xml exposes stable Copilot controls used by Lua and skill guidance", a
   assert.match(xml, /ID="CopilotPanel"[^>]*Offset="326,82"/);
   assert.doesNotMatch(xml, /ID="CopilotButtonLabel"[^>]*String="AI"/);
   assert.match(xml, /ID="XmlLoadedLabel"[^>]*String="LOC_CIV6_AI_COPILOT_STATUS_XML_LOADED"/);
-  assert.match(xml, /ID="StatusLabel"[^>]*String="LOC_CIV6_AI_COPILOT_STATUS_XML_LOADED"/);
+  assert.match(xml, /ID="StatusLabel"[^>]*String="LOC_CIV6_AI_COPILOT_STATUS_READY"/);
+  assert.match(xml, /<GridButton ID="UpdateBriefButton"[^>]*String="LOC_CIV6_AI_COPILOT_UPDATE_BRIEF"/);
+  assert.doesNotMatch(xml, /ID="(?:SyncTurnButton|SyncMapButton|SyncCitiesButton|SyncUnitsButton|SyncTechCivicsButton|SyncGovernmentButton|SyncResourcesButton|SyncDiplomacyButton|ForceFullButton)"/);
+  assert.match(xml, /ID="CopilotPanel"[^>]*Size="398,185"/);
+  assert.match(xml, /<Stack ID="PanelStack"[^>]*Size="352,115"[^>]*StackGrowth="Down"/);
+  assert.match(xml, /<GridButton ID="UpdateBriefButton" Size="352,34"/);
+  assert.match(xml, /<Stack ID="PanelActionsRow" Size="352,28" StackGrowth="Right"/);
+  assert.match(text, /Tag="LOC_CIV6_AI_COPILOT_UPDATE_BRIEF" Language="en_US"[\s\S]*?<Text>Update Briefing<\/Text>/);
+  assert.match(text, /Tag="LOC_CIV6_AI_COPILOT_UPDATE_BRIEF" Language="zh_Hans_CN"[\s\S]*?<Text>更新战情<\/Text>/);
 });
 
 test("mod LaunchBar entry uses a real Civ6 icon instead of text-only AI label", async () => {
@@ -101,7 +103,9 @@ test("mod LaunchBar entry deduplicates stale buttons across UI context reloads",
   assert.match(lua, /local function copilotRegistry\(\)/);
   assert.match(lua, /ExposedMembers\.Civ6AICopilot\.launchBar/);
   assert.match(lua, /local function detachStaleLaunchButton\(buttonStack\)/);
-  assert.match(lua, /buttonStack:DestroyChild\(instance\)/);
+  assert.match(lua, /instance\.CopilotButton or instance\.CopilotPin/);
+  assert.match(lua, /control:SetHide\(true\)/);
+  assert.doesNotMatch(lua, /DestroyChild/);
   assert.match(lua, /emitDiagnostic\("launchbar-deduped"\)/);
   assert.match(lua, /registry\.buttonInstance = launchButtonInstance/);
   assert.match(lua, /registry\.pinInstance = launchPinInstance/);
@@ -162,7 +166,7 @@ test("mod Lua avoids gameplay mutation APIs and emits the bridge sentinel protoc
   assert.match(lua, /CopilotButtonIcon/);
   assert.match(lua, /LuaEvents\.LaunchBar_Resize/);
   assert.match(lua, /emitDiagnostic\("launchbar-attached"/);
-  assert.match(lua, /sha256SelfTest/);
+  assert.doesNotMatch(lua, /sha256SelfTest/);
   assert.match(lua, /hasUnitsInPlot/);
   assert.match(lua, /hasPlayerResources/);
   assert.match(lua, /hasGameInfoResources/);
@@ -183,7 +187,7 @@ test("mod Lua emits an export completion diagnostic for real-game smoke tests", 
   assert.match(lua, /cacheLatestExport\(begin, beginJson, chunkJsons, endJson, diagnosticJson\)/);
   assert.match(lua, /chunkCount = chunkCount/);
   assert.match(lua, /byteLength = #json/);
-  assert.match(lua, /checksumSha256 = begin\.checksumSha256/);
+  assert.doesNotMatch(lua, /checksumSha256/);
   assert.doesNotMatch(lua, /setStatus\([^)]*(sha256|chunk|exportId|分块)/);
   assert.doesNotMatch(lua, /setLastExportStatus\([^)]*(sha256|chunk|exportId|分块)/);
 });
@@ -203,15 +207,14 @@ test("mod Lua supports optional automatic turn sync with local-turn dedupe", asy
   assert.match(lua, /local AUTO_SYNC_MIN_SECONDS = 2/);
   assert.match(lua, /local AUTO_SYNC_DELAY_SECONDS = 1/);
   assert.match(lua, /local VISIBLE_MAP_PLOTS_PER_FRAME = 96/);
-  assert.match(lua, /local SNAPSHOT_HASH_BLOCKS_PER_FRAME = 64/);
-  assert.match(lua, /local SNAPSHOT_CHUNKS_PER_FRAME = 4/);
+  assert.doesNotMatch(lua, /SNAPSHOT_HASH_BLOCKS_PER_FRAME/);
+  assert.match(lua, /local SNAPSHOT_CHUNKS_PER_FRAME = 64/);
   assert.match(lua, /local RAW_BYTES_PER_CHUNK = math\.floor\(CHUNK_SIZE \/ 4\) \* 3/);
   assert.match(lua, /local function toggleAutoSync/);
   assert.match(lua, /local function tryAutoSyncTurn/);
   assert.match(lua, /local function startSyncJob/);
   assert.match(lua, /local function createVisibleMapCollector/);
-  assert.match(lua, /local function createSha256Hasher/);
-  assert.match(lua, /local function stepSha256Hasher/);
+  assert.doesNotMatch(lua, /createSha256Hasher|stepSha256Hasher/);
   assert.match(lua, /ContextPtr:SetUpdate\(onCopilotUpdate\)/);
   assert.match(lua, /ContextPtr:ClearUpdate\(\)/);
   assert.doesNotMatch(lua, /ContextPtr:SetUpdate\(nil\)/);
@@ -221,7 +224,9 @@ test("mod Lua supports optional automatic turn sync with local-turn dedupe", asy
   assert.match(lua, /emitDiagnostic\("auto-sync-skipped"/);
   assert.match(lua, /emitDiagnostic\("auto-sync-scheduled"/);
   assert.match(lua, /emitDiagnostic\("auto-sync-exported"/);
-  assert.match(lua, /startSyncJob\("turn", withCoreModules\(TURN_BRIEF_MODULES\), "auto-turn"/);
+  assert.match(lua, /startSyncJob\("turn", withCoreModules\(TURN_BRIEF_MODULES\), triggerKind or "manual-turn"\)/);
+  assert.match(lua, /return startSyncJob\("full", withCoreModules\(FULL_BRIEF_MODULES\), "auto-turn", function\(exported\)/);
+  assert.match(lua, /skipReason = "already-running"/);
   assert.match(lua, /Events\.LocalPlayerTurnBegin\.Add\(tryAutoSyncTurn\)/);
   assert.match(lua, /Events\.TurnBegin\.Add\(tryAutoSyncTurn\)/);
   assert.match(lua, /Events\.LocalPlayerChanged\.Add\(resetAutoSyncDedupe\)/);
@@ -232,16 +237,18 @@ test("mod Lua binds auto sync controls and keeps progress visible without clutte
 
   assert.match(lua, /Controls\.AutoSyncButton:RegisterCallback\(Mouse\.eLClick, toggleAutoSync\)/);
   assert.match(lua, /Controls\.AutoSyncButton:SetText\(Locale\.Lookup\(autoSyncEnabled and "LOC_CIV6_AI_COPILOT_AUTO_SYNC_ON" or "LOC_CIV6_AI_COPILOT_AUTO_SYNC_OFF"\)\)/);
-  assert.match(lua, /Controls\.AutoSyncStatusLabel:SetText/);
-  assert.match(lua, /Controls\.AutoSyncStatusLabel:SetHide/);
+  assert.match(lua, /Controls\.UpdateBriefButton:RegisterCallback\(Mouse\.eLClick, forceFull\)/);
+  assert.match(lua, /return startSyncJob\("full", withCoreModules\(FULL_BRIEF_MODULES\), "manual-full"\)/);
   assert.match(lua, /Controls\.LastExportLabel:SetText/);
-  assert.match(lua, /Controls\.SyncProgressLabel:SetText/);
-  assert.match(lua, /Controls\.SyncProgressFill:SetSizeX/);
+  assert.match(lua, /local visibleStatus = syncProgressStatus or autoSyncStatus or currentStatus/);
+  assert.match(lua, /local values = \{ \.\.\. \}/);
+  assert.match(lua, /Locale\.Lookup\(key, unpackValues\(values\)\)/);
+  assert.match(lua, /syncProgressStatus = nil/);
+  assert.match(lua, /autoSyncStatus = nil\s+if activeSyncJob ~= nil/);
+  assert.match(lua, /Game\.GetCurrentGameTurn\(\) ~= pending\.gameTurn/);
   const xml = await readFile(modXmlPath, "utf8");
-  assert.match(xml, /<Label ID="AutoSyncStatusLabel" Hidden="1" Size="360,16"[^>]*Align="Center"/);
-  assert.match(xml, /<Label ID="SelectiveSyncLabel"[^>]*Align="Center"/);
-  assert.match(xml, /ID="SyncProgressTrack"/);
-  assert.match(xml, /ID="SyncProgressFill"/);
+  assert.doesNotMatch(xml, /AutoSyncStatusLabel|BridgeHintLabel|SyncProgressLabel|SyncProgressTrack|SelectiveSyncLabel/);
+  assert.doesNotMatch(xml, /SelectiveSyncLabel|SelectiveSyncRow|SyncMapButton|SyncCitiesButton|ForceFullButton/);
 });
 
 test("mod Lua avoids full base64 conversion before emitting snapshot chunks", async () => {
@@ -254,25 +261,29 @@ test("mod Lua avoids full base64 conversion before emitting snapshot chunks", as
   assert.doesNotMatch(lua, /encoded = encoded/);
 });
 
-test("mod Lua SHA-256 self-test does not depend on Civ6 exposing bit32 or bit", async () => {
+test("mod Lua has no transport SHA or arithmetic bit fallback", async () => {
   const lua = await readFile(modLuaPath, "utf8");
 
-  assert.match(lua, /local function arithmeticBand/);
-  assert.match(lua, /local function arithmeticBxor/);
-  assert.match(lua, /local function arithmeticRshift/);
-  assert.match(lua, /local function arithmeticLshift/);
-  assert.doesNotMatch(lua, /if not bitlib then\s+return "0{64}"/);
+  assert.doesNotMatch(lua, /arithmeticBand|arithmeticBxor|arithmeticRshift|arithmeticLshift|bitlib|sha256|localPlayerNameHash/i);
 });
 
-test("mod Lua SHA-256 digest formatting is safe for unsigned 32-bit words", async () => {
+test("light turn modules exclude map scanning and fake notifications", async () => {
   const lua = await readFile(modLuaPath, "utf8");
 
-  assert.match(lua, /local function wordToHex/);
-  assert.doesNotMatch(lua, /string\.format\("%08x"/);
-  assert.match(lua, /string\.format\(\s*"%02x%02x%02x%02x"/);
+  const turn = lua.match(/local TURN_BRIEF_MODULES = \{([\s\S]*?)\}/)?.[1];
+  assert.ok(turn);
+  assert.doesNotMatch(turn, /visibleMap|notifications/);
+  assert.match(turn, /selection/);
+  assert.match(turn, /governors/);
+  assert.match(turn, /trade/);
+  assert.match(turn, /cityStates/);
+  const full = lua.match(/local FULL_BRIEF_MODULES = \{([\s\S]*?)\}/)?.[1];
+  assert.ok(full);
+  assert.match(full, /visibleMap/);
+  assert.doesNotMatch(lua, /"notifications"/);
 });
 
-test("mod Lua exposes selective sync callbacks used by AI guidance", async () => {
+test("mod Lua keeps selective collectors internal while the default panel has one manual update", async () => {
   const lua = await readFile(modLuaPath, "utf8");
 
   for (const callback of [
@@ -286,21 +297,12 @@ test("mod Lua exposes selective sync callbacks used by AI guidance", async () =>
     assert.match(lua, new RegExp(`local function ${callback}`));
   }
 
-  for (const controlId of [
-    "SyncCitiesButton",
-    "SyncUnitsButton",
-    "SyncTechCivicsButton",
-    "SyncGovernmentButton",
-    "SyncResourcesButton",
-    "SyncDiplomacyButton"
-  ]) {
-    assert.match(lua, new RegExp(`Controls\\.${controlId}:RegisterCallback`));
-  }
-
+  assert.match(lua, /Controls\.UpdateBriefButton:RegisterCallback\(Mouse\.eLClick, forceFull\)/);
+  assert.doesNotMatch(lua, /Controls\.Sync(?:Cities|Units|TechCivics|Government|Resources|Diplomacy)Button/);
   assert.match(lua, /startSyncJob\("modules", withCoreModules/);
   assert.match(lua, /"cities", "resources"/);
   assert.match(lua, /"government", "policies", "resources"/);
-  assert.match(lua, /"visibleMap", "notifications"/);
+  assert.match(lua, /"visibleMap", "economy"/);
 });
 
 test("mod Lua only reads optional modules when selective sync requested them", async () => {
@@ -311,6 +313,14 @@ test("mod Lua only reads optional modules when selective sync requested them", a
   assert.match(lua, /local includeGovernment = hasModule\(modules, "government"\) or hasModule\(modules, "policies"\)/);
   assert.match(lua, /local includeResources = hasModule\(modules, "resources"\)/);
   assert.match(lua, /local includeDiplomacy = hasModule\(modules, "diplomacyPublic"\)/);
+  assert.match(lua, /local includeGovernors = hasModule\(modules, "governors"\)/);
+  assert.match(lua, /local includeTrade = hasModule\(modules, "trade"\)/);
+  assert.match(lua, /local includeCityStates = hasModule\(modules, "cityStates"\)/);
+  assert.match(lua, /selection = collectSelection\(localPlayerId\)/);
+  assert.match(lua, /selection = "selection"/);
+  assert.match(lua, /governors = includeGovernors and collectDecisionDomain\("governors", localPlayerId\)/);
+  assert.match(lua, /trade = includeTrade and collectDecisionDomain\("trade", localPlayerId\)/);
+  assert.match(lua, /cityStates = includeCityStates and collectDecisionDomain\("cityStates", localPlayerId\)/);
   assert.match(lua, /techs = includeTechs and collectProgression\("techs", localPlayerId\) or collectEmptyProgression\("UNKNOWN_TECH"\)/);
   assert.match(lua, /civics = includeCivics and collectProgression\("civics", localPlayerId\) or collectEmptyProgression\("UNKNOWN_CIVIC"\)/);
   assert.match(lua, /government = includeGovernment and collectGovernment\(localPlayerId\) or collectEmptyGovernment\(\)/);
@@ -324,8 +334,8 @@ test("mod Lua exports map visibility scope and truncation metadata", async () =>
   assert.match(lua, /local VISIBLE_MAP_TILE_LIMIT = 1024/);
   assert.match(lua, /local function createVisibleMapCollector\(localPlayerId\)/);
   assert.match(lua, /self\.revealedTileCount = self\.revealedTileCount \+ 1/);
-  assert.match(lua, /if #self\.tiles >= VISIBLE_MAP_TILE_LIMIT then/);
-  assert.match(lua, /self\.truncated = true/);
+  assert.match(lua, /if #self\.selectedCoords >= VISIBLE_MAP_TILE_LIMIT then/);
+  assert.match(lua, /self\.truncated = self\.revealedTileCount > #self\.selectedCoords/);
   assert.match(lua, /scope = "player-visible-revealed"/);
   assert.match(lua, /tileLimit = VISIBLE_MAP_TILE_LIMIT/);
   assert.match(lua, /revealedTileCount = self\.revealedTileCount/);
@@ -338,7 +348,8 @@ test("mod Lua attempts to export only currently visible foreign units from visib
 
   assert.match(lua, /local function collectUnitsInVisiblePlot/);
   assert.match(lua, /Units\.GetUnitsInPlot\(plot\)/);
-  assert.match(lua, /if visibleNow and plot then/);
+  assert.match(lua, /if coord\.visibleNow then/);
+  assert.match(lua, /playerVisibility:IsUnitVisible\(unit\)/);
   assert.match(lua, /tile\.unitIds = unitIds/);
   assert.match(lua, /ownerPlayerId ~= localPlayerId/);
   assert.match(lua, /"visible-now"/);
@@ -348,7 +359,7 @@ test("mod Lua attempts to export only currently visible foreign units from visib
 test("mod Lua filters visible map resources through local player resource visibility", async () => {
   const lua = await readFile(modLuaPath, "utf8");
 
-  assert.match(lua, /local function visiblePlotResourceType\(plot, localPlayerId\)/);
+  assert.match(lua, /local function visiblePlotResourceType\(plot, playerResources\)/);
   assert.match(lua, /playerResources:IsResourceVisible\(resourceHash\)/);
   assert.match(lua, /tile\.resourceType = visibleResourceType/);
   assert.doesNotMatch(lua, /resourceType = tostring\(safeCall\(function\(\)\s*return plot and plot:GetResourceType\(\)/);

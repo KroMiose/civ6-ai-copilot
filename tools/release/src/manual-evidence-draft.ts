@@ -52,7 +52,6 @@ interface MachineWindowsChecks {
   playersApiAvailable: boolean;
   mapApiAvailable: boolean;
   base64SelfTest: boolean;
-  sha256SelfTest: boolean;
   hasUnitsInPlot: boolean;
   hasPlayerResources: boolean;
   hasPlayerProgression: boolean;
@@ -245,7 +244,6 @@ async function collectWindowsMachineChecks(options: {
     playersApiAvailable: diagnostic.payload?.hasPlayers === true,
     mapApiAvailable: diagnostic.payload?.hasMap === true,
     base64SelfTest: diagnostic.payload?.base64SelfTest === true,
-    sha256SelfTest: diagnostic.payload?.sha256SelfTest === true,
     hasUnitsInPlot: diagnostic.payload?.hasUnitsInPlot === true,
     hasPlayerResources: diagnostic.payload?.hasPlayerResources === true && diagnostic.payload?.hasGameInfoResources !== false,
     hasPlayerProgression:
@@ -556,7 +554,6 @@ function buildWindowsSmokeDraft(options: {
     playersApiAvailable: options.windows.playersApiAvailable,
     mapApiAvailable: options.windows.mapApiAvailable,
     base64SelfTest: options.windows.base64SelfTest,
-    sha256SelfTest: options.windows.sha256SelfTest,
     hasUnitsInPlot: options.windows.hasUnitsInPlot,
     hasPlayerResources: options.windows.hasPlayerResources,
     hasPlayerProgression: options.windows.hasPlayerProgression,

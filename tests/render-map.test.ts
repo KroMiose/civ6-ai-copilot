@@ -37,12 +37,12 @@ test("map renderer uses hex cells with coordinates, resources, and visibility me
   const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
   snapshot.visibleMap.tiles.push({
     source: "fixture",
-    visibility: "revealed",
+    visibility: "visible-now",
     confidence: "confirmed",
     x: 13,
     y: 19,
     revealed: true,
-    visibleNow: false,
+    visibleNow: true,
     terrainType: "TERRAIN_COAST",
     resourceType: "RESOURCE_HORSES"
   });
@@ -54,6 +54,14 @@ test("map renderer uses hex cells with coordinates, resources, and visibility me
   assert.match(rendered.svg, /data-tile="13,19"/);
   assert.match(rendered.svg, /data-resource-type="RESOURCE_HORSES"/);
   assert.doesNotMatch(rendered.svg, />RESOURCE_HORSES</);
+});
+
+test("map renderer does not draw undeclared historical module payloads", async () => {
+  const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
+  snapshot.modules = ["meta", "localPlayer"];
+  const rendered = await renderSnapshotMapObject(snapshot);
+  assert.deepEqual(rendered.counts, { tiles: 0, cities: 0, units: 0 });
+  assert.doesNotMatch(rendered.svg, /Visible enemy warrior|Capital/);
 });
 
 test("map renderer matches Civ6 screen orientation with lower y rows drawn lower", async () => {

@@ -58,8 +58,11 @@ test("tuner bridge reads the cached Copilot export through a Nexus socket and wr
     }
 
     const latest = JSON.parse(await readFile(result.written.latestPath, "utf8"));
+    const manifest = JSON.parse(await readFile(result.written.manifestPath, "utf8"));
     assert.equal(latest.source.exportId, "tuner-export");
     assert.equal(latest.source.transport, "lua-log");
+    assert.equal(manifest.checksumScope, "latest-json-file");
+    assert.equal("transportChecksumSha256" in manifest, false);
   } finally {
     await server.close();
     await rm(outputDir, { recursive: true, force: true });

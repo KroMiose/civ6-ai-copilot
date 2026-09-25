@@ -127,8 +127,7 @@ export async function runTunerBridgeOnce(options: TunerBridgeOptions): Promise<T
     }
 
     const written = await writeSnapshotOutputs(assembled.snapshot, options.outputDir, {
-      exportId: assembled.exportId,
-      checksumSha256: assembled.checksumSha256
+      exportId: assembled.exportId
     });
 
     return {

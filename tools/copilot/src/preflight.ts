@@ -43,6 +43,7 @@ export interface CopilotPreflightReport {
 interface LatestManifest {
   exportId?: unknown;
   checksumSha256?: unknown;
+  checksumScope?: unknown;
   writtenAt?: unknown;
 }
 
@@ -66,7 +67,7 @@ export async function runCopilotPreflight(options: CopilotPreflightOptions = {})
       issues: ["没有找到 snapshot。"],
       warnings,
       nextActions: [
-        "在 Civ6 点击左上副官入口，打开「战情简报」，点击「汇总本回合」，看到“简报已汇总，可继续由AI副官分析。”和“最近汇总：…”后等待 latest.json 更新。",
+        "在 Civ6 点击左上副官入口，打开「战情简报」，点击「更新战情」，看到“简报已汇总，可继续由AI副官分析。”和“最近汇总：…”后等待 latest.json 更新。",
         `重新运行标准入口：npm run copilot -- ${commandIntentArgs} --clean`
       ]
     };
@@ -115,8 +116,19 @@ export async function runCopilotPreflight(options: CopilotPreflightOptions = {})
   }
 
   const freshness = checkFreshness(snapshot.exportedAt, options.maxAgeMinutes ?? DEFAULT_MAX_AGE_MINUTES);
+  for (const moduleName of summary.syncAdvice.requiredModules) {
+    if (!summary.coverage.availableModules.includes(moduleName)) continue;
+    const capturedAt = snapshot.moduleStatus?.[moduleName]?.capturedAt;
+    const moduleFreshness = checkFreshness(capturedAt, options.maxAgeMinutes ?? DEFAULT_MAX_AGE_MINUTES);
+    if (!moduleFreshness.ok) {
+      freshness.ok = false;
+      freshness.issues.push(`模块 ${moduleName} 的采集时间已过期或无效；请刷新对应专题。`);
+    }
+    freshness.warnings.push(...moduleFreshness.warnings.map((warning) => `${moduleName}: ${warning}`));
+  }
   warnings.push(...freshness.warnings);
   issues.push(...freshness.issues);
+  if (!freshness.ok) nextActions.push("请在战情简报刷新过期的专题；刷新其它模块不会更新该模块的采集时间。");
 
   if (!summary.syncAdvice.ok) {
     nextActions.push(summary.syncAdvice.recommendation);
@@ -227,7 +239,7 @@ function checkCompatibility(snapshot: SnapshotLike): { ok: boolean; issues: stri
     issues.push("snapshot 未提供 source.compatVersion，且无法从 source.modVersion 推导兼容版本。");
   } else if (snapshotCompat !== COMPAT_VERSION) {
     issues.push(`snapshot 兼容版本是 ${snapshotCompat}，当前 skill/tool 需要 ${COMPAT_VERSION}；请升级 Mod 或 skill 后重新汇总。`);
-    nextActions.push("升级 civ6-ai-copilot Mod 和 skill，使二者的 major.minor 版本一致，再在战情简报重新汇总本回合。");
+    nextActions.push("升级 civ6-ai-copilot Mod 和 skill，使二者的 major.minor 版本一致，再在战情简报点击「更新战情」。");
   }
 
   if (snapshotCompat === COMPAT_VERSION && typeof modVersion === "string" && modVersion !== VERSION) {
@@ -288,6 +300,10 @@ async function checkManifest(
   const warnings: string[] = [];
   const snapshotChecksum = createHash("sha256").update(Buffer.from(snapshotText, "utf8")).digest("hex");
 
+  if (manifest.checksumScope !== "latest-json-file") {
+    issues.push("latest-manifest.json 必须标明 checksumScope=latest-json-file；请用 0.2 工具重新生成输出。");
+  }
+
   if (typeof manifest.checksumSha256 !== "string") {
     issues.push("latest-manifest.json 未提供 checksumSha256。");
   } else if (manifest.checksumSha256 !== snapshotChecksum) {
@@ -335,7 +351,7 @@ function checkFreshness(exportedAt: unknown, maxAgeMinutes?: number): { ok: bool
   if (ageMinutes > maxAgeMinutes) {
     return {
       ok: false,
-      issues: [`snapshot 已超过 ${maxAgeMinutes} 分钟；请在战情简报重新汇总本回合。`],
+      issues: [`snapshot 已超过 ${maxAgeMinutes} 分钟；请在战情简报点击「更新战情」。`],
       warnings: []
     };
   }

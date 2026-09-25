@@ -24,7 +24,6 @@ export function createPassingManualEvidence(): Record<string, unknown> {
       playersApiAvailable: true,
       mapApiAvailable: true,
       base64SelfTest: true,
-      sha256SelfTest: true,
       hasUnitsInPlot: true,
       hasPlayerResources: true,
       hasPlayerProgression: true,

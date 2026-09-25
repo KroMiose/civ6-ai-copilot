@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { TextDecoder } from "node:util";
 import {
   COPILOT_DIAGNOSTIC,
   COPILOT_LOADED,
@@ -61,6 +61,7 @@ export function parseLogContent(content: string): ParsedExport[] {
     if (marker === SNAPSHOT_CHUNK) {
       const chunk = assertChunk(payload, lineNumber);
       const parsed = ensureExport(exportsById, chunk.exportId, lineNumber);
+      if (parsed.end) parsed.issues.push(`line ${lineNumber}: chunk appeared after end for exportId ${chunk.exportId}`);
       parsed.chunks.push(chunk);
       parsed.lineNumbers.push(lineNumber);
       continue;
@@ -68,7 +69,11 @@ export function parseLogContent(content: string): ParsedExport[] {
 
     const end = assertEnd(payload, lineNumber);
     const parsed = ensureExport(exportsById, end.exportId, lineNumber);
-    parsed.end = end;
+    if (parsed.end) {
+      parsed.issues.push(`line ${lineNumber}: duplicate end for exportId ${end.exportId}`);
+    } else {
+      parsed.end = end;
+    }
     parsed.lineNumbers.push(lineNumber);
   }
 
@@ -106,7 +111,7 @@ export function diagnoseLogContent(content: string): LogDiagnosticReport {
     issues.push((error as Error).message);
   }
 
-  const completeExports = parsedExports.filter((candidate) => candidate.end && candidate.issues.length === 0);
+  const completeExports = parsedExports.filter(isStructurallyComplete);
   const sortedExports = [...parsedExports].sort((a, b) => Math.max(...a.lineNumbers) - Math.max(...b.lineNumbers));
   const latest = sortedExports[sortedExports.length - 1];
   const exportCompletionDiagnostics = diagnostics.filter((diagnostic) => diagnostic.payload.reason === "exported");
@@ -117,10 +122,9 @@ export function diagnoseLogContent(content: string): LogDiagnosticReport {
     if (!parsed.end) {
       issues.push(`export ${parsed.begin.exportId} has no ${SNAPSHOT_END} line`);
     }
-    if (parsed.chunks.length !== parsed.begin.chunkCount) {
-      issues.push(
-        `export ${parsed.begin.exportId} expected ${parsed.begin.chunkCount} chunks but found ${parsed.chunks.length}`
-      );
+    if (parsed.end && parsed.issues.length === 0) {
+      const structureIssue = getChunkStructureIssue(parsed);
+      if (structureIssue) issues.push(structureIssue);
     }
   }
 
@@ -139,7 +143,7 @@ export function diagnoseLogContent(content: string): LogDiagnosticReport {
 
 export function assembleLatestCompleteExport(exports: ParsedExport[]): AssembledSnapshot {
   const complete = exports
-    .filter((candidate) => candidate.end && candidate.issues.length === 0)
+    .filter((candidate) => candidate.end)
     .sort((a, b) => Math.max(...a.lineNumbers) - Math.max(...b.lineNumbers));
 
   if (complete.length === 0) {
@@ -159,27 +163,17 @@ export function assembleExport(parsed: ParsedExport): AssembledSnapshot {
     throw new BridgeParseError(`Export ${begin.exportId} has parse issues: ${parsed.issues.join("; ")}`);
   }
 
-  if (parsed.chunks.length !== begin.chunkCount) {
-    throw new BridgeParseError(
-      `Export ${begin.exportId} expected ${begin.chunkCount} chunks but found ${parsed.chunks.length}.`
-    );
-  }
-
-  const seen = new Set<number>();
-  for (const chunk of parsed.chunks) {
-    if (chunk.index < 0 || chunk.index >= begin.chunkCount) {
-      throw new BridgeParseError(`Export ${begin.exportId} has out-of-range chunk index ${chunk.index}.`);
-    }
-    if (seen.has(chunk.index)) {
-      throw new BridgeParseError(`Export ${begin.exportId} has duplicate chunk index ${chunk.index}.`);
-    }
-    seen.add(chunk.index);
-  }
+  const structureIssue = getChunkStructureIssue(parsed);
+  if (structureIssue) throw new BridgeParseError(structureIssue);
 
   const payloadBase64 = [...parsed.chunks]
     .sort((a, b) => a.index - b.index)
     .map((chunk) => chunk.data)
     .join("");
+
+  if (!isCanonicalBase64(payloadBase64)) {
+    throw new BridgeParseError(`Export ${begin.exportId} contains invalid or non-canonical Base64 data.`);
+  }
 
   const jsonBytes = Buffer.from(payloadBase64, "base64");
   if (jsonBytes.byteLength !== begin.byteLength) {
@@ -188,14 +182,13 @@ export function assembleExport(parsed: ParsedExport): AssembledSnapshot {
     );
   }
 
-  const checksumSha256 = createHash("sha256").update(jsonBytes).digest("hex");
-  if (checksumSha256 !== begin.checksumSha256) {
-    throw new BridgeParseError(
-      `Export ${begin.exportId} checksum mismatch: expected ${begin.checksumSha256}, got ${checksumSha256}.`
-    );
+  let jsonText: string;
+  try {
+    jsonText = new TextDecoder("utf-8", { fatal: true }).decode(jsonBytes);
+  } catch (error) {
+    throw new BridgeParseError(`Export ${begin.exportId} decoded payload is not valid UTF-8: ${(error as Error).message}`);
   }
 
-  const jsonText = jsonBytes.toString("utf8");
   let snapshot: unknown;
   try {
     snapshot = JSON.parse(jsonText);
@@ -205,12 +198,11 @@ export function assembleExport(parsed: ParsedExport): AssembledSnapshot {
     );
   }
 
-  return {
-    exportId: begin.exportId,
-    checksumSha256,
-    jsonText,
-    snapshot
-  };
+  const payload = snapshot as { schemaVersion?: unknown; source?: { exportId?: unknown; protocolVersion?: unknown } } | null;
+  if (payload?.source?.exportId !== begin.exportId || payload?.source?.protocolVersion !== begin.protocolVersion || payload?.schemaVersion !== begin.schemaVersion) {
+    throw new BridgeParseError(`Export ${begin.exportId} payload identity/version does not match BEGIN.`);
+  }
+  return { exportId: begin.exportId, jsonText, snapshot };
 }
 
 export function buildSnapshotLogLines(snapshot: unknown, options?: BuildSnapshotLogLineOptions): string[] {
@@ -227,7 +219,6 @@ export function buildSnapshotLogLines(snapshot: unknown, options?: BuildSnapshot
     schemaVersion: SCHEMA_VERSION,
     chunkCount: chunks.length,
     byteLength: jsonBytes.byteLength,
-    checksumSha256: createHash("sha256").update(jsonBytes).digest("hex"),
     encoding: "base64-json",
     createdAt: new Date(0).toISOString()
   };
@@ -263,7 +254,6 @@ export function buildExportCompletionDiagnosticLogLine(
     exportId: begin.exportId,
     chunkCount: begin.chunkCount,
     byteLength: begin.byteLength,
-    checksumSha256: begin.checksumSha256,
     emittedAt: new Date(0).toISOString(),
     ...extra
   })}`;
@@ -312,7 +302,6 @@ function ensureExport(exportsById: Map<string, ParsedExport>, exportId: string, 
       schemaVersion: "unknown",
       chunkCount: 0,
       byteLength: 0,
-      checksumSha256: "",
       encoding: "base64-json"
     },
     chunks: [],
@@ -329,10 +318,13 @@ function assertBegin(value: unknown, lineNumber: number): SnapshotBegin {
   if (
     begin.protocolVersion !== PROTOCOL_VERSION ||
     typeof begin.exportId !== "string" ||
+    begin.exportId.length === 0 ||
     typeof begin.schemaVersion !== "string" ||
-    typeof begin.chunkCount !== "number" ||
-    typeof begin.byteLength !== "number" ||
-    typeof begin.checksumSha256 !== "string" ||
+    begin.schemaVersion.length === 0 ||
+    !Number.isSafeInteger(begin.chunkCount) ||
+    (begin.chunkCount as number) <= 0 ||
+    !Number.isSafeInteger(begin.byteLength) ||
+    (begin.byteLength as number) <= 0 ||
     begin.encoding !== "base64-json"
   ) {
     throw new BridgeParseError(`line ${lineNumber}: invalid ${SNAPSHOT_BEGIN} payload shape.`);
@@ -343,7 +335,13 @@ function assertBegin(value: unknown, lineNumber: number): SnapshotBegin {
 function assertChunk(value: unknown, lineNumber: number): SnapshotChunk {
   const payload = assertObject(value, lineNumber, SNAPSHOT_CHUNK);
   const chunk = payload as Partial<SnapshotChunk>;
-  if (typeof chunk.exportId !== "string" || typeof chunk.index !== "number" || typeof chunk.data !== "string") {
+  if (
+    typeof chunk.exportId !== "string" ||
+    chunk.exportId.length === 0 ||
+    !Number.isSafeInteger(chunk.index) ||
+    (chunk.index as number) < 0 ||
+    typeof chunk.data !== "string"
+  ) {
     throw new BridgeParseError(`line ${lineNumber}: invalid ${SNAPSHOT_CHUNK} payload shape.`);
   }
   return chunk as SnapshotChunk;
@@ -352,7 +350,7 @@ function assertChunk(value: unknown, lineNumber: number): SnapshotChunk {
 function assertEnd(value: unknown, lineNumber: number): SnapshotEnd {
   const payload = assertObject(value, lineNumber, SNAPSHOT_END);
   const end = payload as Partial<SnapshotEnd>;
-  if (typeof end.exportId !== "string") {
+  if (typeof end.exportId !== "string" || end.exportId.length === 0) {
     throw new BridgeParseError(`line ${lineNumber}: invalid ${SNAPSHOT_END} payload shape.`);
   }
   return end as SnapshotEnd;
@@ -363,4 +361,40 @@ function assertObject(value: unknown, lineNumber: number, marker: Marker): Recor
     throw new BridgeParseError(`line ${lineNumber}: ${marker} payload must be an object.`);
   }
   return value as Record<string, unknown>;
+}
+
+function isCanonicalBase64(value: string): boolean {
+  if (value.length === 0 || value.length % 4 !== 0) {
+    return false;
+  }
+
+  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value)) {
+    return false;
+  }
+
+  return Buffer.from(value, "base64").toString("base64") === value;
+}
+
+function isStructurallyComplete(parsed: ParsedExport): boolean {
+  return Boolean(parsed.end) && parsed.issues.length === 0 && getChunkStructureIssue(parsed) === undefined;
+}
+
+function getChunkStructureIssue(parsed: ParsedExport): string | undefined {
+  const { begin, chunks } = parsed;
+  if (chunks.length !== begin.chunkCount) {
+    return `Export ${begin.exportId} expected ${begin.chunkCount} chunks but found ${chunks.length}.`;
+  }
+
+  const seen = new Set<number>();
+  for (const chunk of chunks) {
+    if (chunk.index < 0 || chunk.index >= begin.chunkCount) {
+      return `Export ${begin.exportId} has out-of-range chunk index ${chunk.index}.`;
+    }
+    if (seen.has(chunk.index)) {
+      return `Export ${begin.exportId} has duplicate chunk index ${chunk.index}.`;
+    }
+    seen.add(chunk.index);
+  }
+
+  return undefined;
 }

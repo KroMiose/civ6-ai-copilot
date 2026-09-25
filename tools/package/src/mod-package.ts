@@ -72,6 +72,7 @@ const requiredFiles = [
   "thumbnail.png",
   "ui/civ6_ai_copilot.xml",
   "ui/civ6_ai_copilot.lua",
+  "ui/civ6_ai_copilot_decision_data.lua",
   "text/civ6-ai-copilot-text.xml"
 ];
 
@@ -79,11 +80,12 @@ const modInfoFilesSectionEntries = [
   "thumbnail.png",
   "ui/civ6_ai_copilot.xml",
   "ui/civ6_ai_copilot.lua",
+  "ui/civ6_ai_copilot_decision_data.lua",
   "text/civ6-ai-copilot-text.xml"
 ];
 
 const allowedInGameActions = new Set(["UpdateText", "AddUserInterfaces", "ImportFiles"]);
-const allowedImportFiles = new Set(["ui/civ6_ai_copilot.lua"]);
+const allowedImportFiles = new Set(["ui/civ6_ai_copilot.lua", "ui/civ6_ai_copilot_decision_data.lua"]);
 const luaContextBasenamePattern = /^[A-Za-z][A-Za-z0-9_]*$/;
 const gameplayActionTags = [
   "UpdateDatabase",
@@ -164,12 +166,34 @@ export async function validateModSource(sourceDir: string): Promise<ModPackageVa
   }
 
   await validateLuaRuntimeMarkers(sourceDir, issues);
+  await validateUiLocalization(sourceDir, issues);
 
   return {
     ok: issues.length === 0,
     issues,
     files
   };
+}
+
+async function validateUiLocalization(sourceDir: string, issues: string[]): Promise<void> {
+  try {
+    const [lua, xml, textXml] = await Promise.all([
+      readFile(path.join(sourceDir, "ui/civ6_ai_copilot.lua"), "utf8"),
+      readFile(path.join(sourceDir, "ui/civ6_ai_copilot.xml"), "utf8"),
+      readFile(path.join(sourceDir, "text/civ6-ai-copilot-text.xml"), "utf8")
+    ]);
+    const referencedKeys = new Set(`${lua}\n${xml}`.match(/LOC_CIV6_AI_COPILOT_[A-Z_]+/g) ?? []);
+    const translations = [...textXml.replace(/<!--[\s\S]*?-->/g, "").matchAll(/<Replace\b[^>]*>/g)]
+      .map(([tag]) => ({ key: xmlAttribute(tag, "Tag"), language: xmlAttribute(tag, "Language") }));
+    for (const language of ["en_US", "zh_Hans_CN"]) {
+      const keys = new Set(translations.filter((entry) => entry.language === language).map((entry) => entry.key));
+      for (const key of referencedKeys) {
+        if (!keys.has(key)) issues.push(`text/civ6-ai-copilot-text.xml is missing ${language} translation for ${key}`);
+      }
+    }
+  } catch {
+    // Required-file checks report missing UI or localization files.
+  }
 }
 
 function validateActionSurface(modInfo: string, issues: string[]): void {
@@ -317,6 +341,25 @@ function validateCopilotSmokeUi(relativePath: string, xml: string, issues: strin
     }
   }
 
+  const panelStack = extractXmlElementContentById(xml, "Stack", "PanelStack");
+  if (panelStack) {
+    const gridButtons = [...panelStack.matchAll(/<GridButton\b[^>]*>/g)].map((match) => match[0]);
+    const visibleButtonIds = gridButtons
+      .filter((tag) => xmlAttribute(tag, "Hidden") !== "1")
+      .map((tag) => xmlAttribute(tag, "ID"))
+      .filter((id): id is string => Boolean(id))
+      .sort();
+    if (!visibleButtonIds.includes("UpdateBriefButton")) {
+      issues.push(`${relativePath} PanelStack must expose the UpdateBriefButton manual full-refresh action`);
+    }
+    if (!visibleButtonIds.includes("AutoSyncButton") || !visibleButtonIds.includes("CloseButton")) {
+      issues.push(`${relativePath} PanelStack must retain the automatic sync toggle and CloseButton`);
+    }
+    if (visibleButtonIds.some((id) => !["UpdateBriefButton", "AutoSyncButton", "CloseButton"].includes(id))) {
+      issues.push(`${relativePath} PanelStack must not expose topic-specific sync buttons`);
+    }
+  }
+
   const iconPreviewButton = findXmlTagById(xml, "IconPreviewButton");
   if (iconPreviewButton && xmlAttribute(iconPreviewButton, "Hidden") !== "1") {
     issues.push(`${relativePath} IconPreviewButton must stay hidden outside icon review builds`);
@@ -328,11 +371,10 @@ function validateCopilotSmokeUi(relativePath: string, xml: string, issues: strin
   }
 
   const xmlLoadedLabel = findXmlTagById(xml, "XmlLoadedLabel");
-  const statusLabel = findXmlTagById(xml, "StatusLabel");
   if (
     !xmlLoadedLabel ||
     xmlAttribute(xmlLoadedLabel, "String") !== "LOC_CIV6_AI_COPILOT_STATUS_XML_LOADED" ||
-    xmlAttribute(statusLabel ?? "", "String") !== "LOC_CIV6_AI_COPILOT_STATUS_XML_LOADED"
+    xmlAttribute(xmlLoadedLabel, "Hidden") === "1"
   ) {
     issues.push(`${relativePath} must expose a visible XML-loaded Lua-pending diagnostic before Lua initializes`);
   }
@@ -341,6 +383,24 @@ function validateCopilotSmokeUi(relativePath: string, xml: string, issues: strin
 function findXmlTagById(xml: string, id: string): string | undefined {
   const pattern = new RegExp(`<[A-Za-z_][A-Za-z0-9_.:-]*\\b[^>]*\\bID="${escapeRegExp(id)}"[^>]*>`);
   return xml.match(pattern)?.[0];
+}
+
+function extractXmlElementContentById(xml: string, tagName: string, id: string): string | undefined {
+  const openingTag = findXmlTagById(xml, id);
+  const openingIndex = openingTag ? xml.indexOf(openingTag) : -1;
+  if (!openingTag || openingIndex < 0 || !openingTag.startsWith(`<${tagName}`)) return undefined;
+  const contentStart = openingIndex + openingTag.length;
+  const tags = new RegExp(`<\\/?${escapeRegExp(tagName)}\\b[^>]*>`, "g");
+  tags.lastIndex = contentStart;
+  let depth = 1;
+  let match: RegExpExecArray | null;
+  while ((match = tags.exec(xml)) !== null) {
+    const token = match[0];
+    if (token.startsWith(`</${tagName}`)) depth -= 1;
+    else if (!token.endsWith("/>")) depth += 1;
+    if (depth === 0) return xml.slice(contentStart, match.index);
+  }
+  return undefined;
 }
 
 function xmlAttribute(tag: string, attribute: string): string | undefined {
@@ -382,7 +442,6 @@ async function validateLuaRuntimeMarkers(sourceDir: string, issues: string[]): P
   validateLuaSyntaxSurface(lua, issues);
   validateLuaVersionConstants(lua, issues);
   validateLuaCopilotIcon(lua, issues);
-  validateLuaPanelStatusFeedback(lua, issues);
   validateLuaAutoSyncSurface(lua, issues);
 
   if (
@@ -423,13 +482,10 @@ function validateLuaAutoSyncSurface(lua: string, issues: string[]): void {
     /local function toggleAutoSync/,
     /local function startSyncJob/,
     /local function createVisibleMapCollector/,
-    /local SNAPSHOT_HASH_BLOCKS_PER_FRAME = 64/,
-    /local RAW_BYTES_PER_CHUNK = math\.floor\(CHUNK_SIZE \/ 4\) \* 3/,
-    /local function createSha256Hasher/,
-    /local function stepSha256Hasher/,
+    /local SNAPSHOT_CHUNKS_PER_FRAME = 64/,
     /Controls\.AutoSyncButton:RegisterCallback\(Mouse\.eLClick, toggleAutoSync\)/,
     /Events\.LocalPlayerTurnBegin\.Add\(tryAutoSyncTurn\)/,
-    /startSyncJob\("turn", withCoreModules\(TURN_BRIEF_MODULES\), "auto-turn"/,
+    /startSyncJob\("full", withCoreModules\(FULL_BRIEF_MODULES\), "auto-turn"/,
     /ContextPtr:SetUpdate\(onCopilotUpdate\)/,
     /ContextPtr:ClearUpdate\(\)/,
     /emitDiagnostic\("auto-sync-enabled"/,
@@ -440,7 +496,7 @@ function validateLuaAutoSyncSurface(lua: string, issues: string[]): void {
   ];
 
   if (!requiredPatterns.every((pattern) => pattern.test(lua))) {
-    issues.push("ui/civ6_ai_copilot.lua must support optional auto turn sync diagnostics without bypassing syncTurn");
+    issues.push("ui/civ6_ai_copilot.lua must support optional auto turn sync diagnostics through the full briefing job");
   }
 
   if (/local encoded = base64Encode\(json\)/.test(lua)) {
@@ -792,21 +848,6 @@ function validateLuaSelectiveSyncGuards(lua: string, issues: string[]): void {
   }
 }
 
-function validateLuaPanelStatusFeedback(lua: string, issues: string[]): void {
-  const statusRequirements = [
-    {
-      pattern: /checksumSha256 = begin\.checksumSha256/,
-      issue: "ui/civ6_ai_copilot.lua must keep transport checksum in diagnostics even when hidden from the player panel"
-    }
-  ];
-
-  for (const { pattern, issue } of statusRequirements) {
-    if (!pattern.test(lua)) {
-      issues.push(issue);
-    }
-  }
-}
-
 async function validateLuaControlBindings(sourceDir: string, lua: string, issues: string[]): Promise<void> {
   const uiPath = path.join(sourceDir, "ui/civ6_ai_copilot.xml");
   let uiXml = "";
@@ -1092,7 +1133,7 @@ async function writePackageChecklist(packageDir: string): Promise<void> {
     `2. Confirm ${MODINFO_FILE} is directly inside civ6-ai-copilot, not nested one level deeper.`,
     "3. Start Civilization VI and open Additional Content.",
     "4. Enable Civ6 AI Copilot, start or load a real game, and confirm the Copilot icon button appears in the native left-top LaunchBar.",
-    "5. Open the briefing panel and click `汇总本回合`. For war/map/settling questions, also click `更新地图情报`.",
+    "5. Open the briefing panel and click `更新战情` (`Update Briefing`) for a complete refresh, or enable `每回合自动更新` to run the same full refresh at each local-player turn.",
     "",
     "## Verify the export",
     "",

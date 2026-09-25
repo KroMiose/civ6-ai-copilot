@@ -17,7 +17,7 @@ test("sync guidance maps war intent to units, map, cities, and public diplomacy"
 test("sync guidance maps exploration intent to map and units without broad planning modules", () => {
   const result = inferRequiredModulesForIntents(["exploration"]);
   assert.deepEqual(result.scenarios, ["exploration"]);
-  assert.deepEqual(result.requiredModules, ["meta", "localPlayer", "units", "visibleMap"]);
+  assert.deepEqual(result.requiredModules, ["meta", "localPlayer", "selection", "units", "visibleMap"]);
 });
 
 test("sync guidance accepts fixture for war intent because required modules exist", async () => {
@@ -34,6 +34,8 @@ test("sync guidance asks for policy modules when snapshot lacks them", async () 
   assert.equal(result.missingModules.includes("government"), true);
   assert.equal(result.missingModules.includes("policies"), true);
   assert.equal(result.missingModules.includes("resources"), true);
+  assert.equal(result.missingModules.includes("selection"), true);
+  assert.equal(result.missingModules.includes("governors"), true);
   assert.match(result.recommendation, /左上副官入口/);
   assert.match(result.recommendation, /简报已汇总/);
 });
@@ -43,8 +45,8 @@ test("sync guidance asks for map visibility for exploration intent when map and 
   snapshot.modules = ["meta", "localPlayer", "cities"];
   const result = buildSyncSuggestion({ intents: ["exploration"], snapshot });
   assert.equal(result.ok, false);
-  assert.deepEqual(result.missingModules, ["units", "visibleMap"]);
-  assert.match(result.recommendation, /更新地图情报/);
+  assert.deepEqual(result.missingModules, ["selection", "units", "visibleMap"]);
+  assert.match(result.recommendation, /更新战情/);
 });
 
 test("sync guidance treats low-confidence public diplomacy as not enough for war intent", async () => {
@@ -59,7 +61,7 @@ test("sync guidance explains the in-game briefing flow when snapshot is missing"
   const result = buildSyncSuggestion({ intents: ["war"] });
   assert.equal(result.ok, false);
   assert.match(result.recommendation, /左上副官入口/);
-  assert.match(result.recommendation, /汇总本回合/);
+  assert.match(result.recommendation, /更新战情/);
   assert.match(result.recommendation, /npm run copilot/);
   assert.match(result.recommendation, /--intent "war"/);
 });
@@ -67,4 +69,34 @@ test("sync guidance explains the in-game briefing flow when snapshot is missing"
 test("legacy question inference remains a fallback, not the standard tool contract", () => {
   const result = inferRequiredModules("勇士应该往哪里探索？");
   assert.deepEqual(result.scenarios, ["exploration"]);
+});
+
+test("sync guidance checks module age and unit scope and uses a light default", async () => {
+  const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
+  snapshot.moduleStatus.visibleMap.capturedTurn--;
+  snapshot.moduleStatus.units.scope = "own-only";
+  const result = buildSyncSuggestion({ intents: ["war"], snapshot });
+  assert.equal(result.ok, false);
+  assert.equal(result.missingModules.includes("visibleMap"), true);
+  assert.match(result.recommendation, /更新战情/);
+  const turn = inferRequiredModulesForIntents(["turn-priority"]);
+  assert.equal(turn.requiredModules.includes("visibleMap"), false);
+  assert.equal(turn.requiredModules.includes("notifications"), false);
+  assert.equal(turn.requiredModules.includes("economy"), true);
+});
+
+test("sync guidance exempts not-applicable domain modules and reports unavailable modules", async () => {
+  const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
+  snapshot.governors.availability = "not-applicable";
+  const notApplicable = buildSyncSuggestion({ requiredModules: ["governors"], snapshot });
+  assert.equal(notApplicable.ok, true);
+  assert.deepEqual(notApplicable.notApplicableModules, ["governors"]);
+
+  snapshot.governors.availability = "unavailable";
+  snapshot.governors.governors = [];
+  const unavailable = buildSyncSuggestion({ requiredModules: ["governors"], snapshot });
+  assert.equal(unavailable.ok, false);
+  assert.deepEqual(unavailable.unavailableModules, ["governors"]);
+  assert.match(unavailable.recommendation, /不能将其当作空结果/);
+  assert.match(unavailable.recommendation, /更新战情/);
 });

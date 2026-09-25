@@ -2,10 +2,10 @@
 -- This file must stay read-only with respect to gameplay state. It only reads UI-visible data and exports chunks.
 
 local MOD_ID = "civ6-ai-copilot"
-local MOD_VERSION = "0.1.1"
-local COMPAT_VERSION = "0.1"
-local SCHEMA_VERSION = "0.1.0"
-local PROTOCOL_VERSION = "0.1.0"
+local MOD_VERSION = "0.3.1"
+local COMPAT_VERSION = "0.3"
+local SCHEMA_VERSION = "0.3.0"
+local PROTOCOL_VERSION = "0.3.0"
 local CHUNK_SIZE = 700
 
 local SNAPSHOT_BEGIN = "CIV6_AI_COPILOT_SNAPSHOT_BEGIN"
@@ -98,21 +98,21 @@ local AUTO_SYNC_MIN_SECONDS = 2
 local AUTO_SYNC_DELAY_SECONDS = 1
 local VISIBLE_MAP_TILE_LIMIT = 1024
 local VISIBLE_MAP_PLOTS_PER_FRAME = 96
-local SNAPSHOT_HASH_BLOCKS_PER_FRAME = 64
-local SNAPSHOT_CHUNKS_PER_FRAME = 4
+local SNAPSHOT_CHUNKS_PER_FRAME = 64
 local RAW_BYTES_PER_CHUNK = math.floor(CHUNK_SIZE / 4) * 3
-local PROGRESS_BAR_WIDTH = 336
 local TURN_BRIEF_MODULES = {
-  "cities", "units", "techs", "civics", "government", "policies", "resources", "diplomacyPublic", "visibleMap"
+  "selection", "cities", "units", "techs", "civics", "government", "policies", "resources", "diplomacyPublic", "economy",
+  "governors", "trade", "cityStates"
 }
 local MAP_BRIEF_MODULES = { "units", "visibleMap", "diplomacyPublic" }
 local FULL_BRIEF_MODULES = {
-  "meta", "localPlayer", "cities", "units", "techs", "civics", "government", "policies", "resources", "diplomacyPublic", "visibleMap", "notifications"
+  "meta", "localPlayer", "selection", "cities", "units", "techs", "civics", "government", "policies", "resources", "diplomacyPublic", "visibleMap", "economy",
+  "governors", "trade", "cityStates"
 }
 
-local bitlib = bit32 or bit
 local unpackValues = table.unpack or unpack
 local jsonKinds = setmetatable({}, { __mode = "k" })
+local JSON_NULL = {}
 local launchButtonInstance = {}
 local launchPinInstance = {}
 local launchButtonAttached = false
@@ -124,6 +124,19 @@ local pendingAutoSync = nil
 local activeSyncJob = nil
 local copilotUpdateActive = false
 local onCopilotUpdate = nil
+local exportSequence = 0
+local sessionNonce = tostring({}):gsub("[^%w]", "")
+local SESSION_ID = "load-" .. tostring(os.time()) .. "-" .. sessionNonce
+local captureCache = {
+  playerId = nil,
+  gameTurn = nil,
+  sessionId = SESSION_ID,
+  payloads = {},
+  moduleStatus = {}
+}
+local currentStatus = nil
+local syncProgressStatus = nil
+local autoSyncStatus = nil
 
 local function safeCall(fn, fallback)
   local values = { pcall(fn) }
@@ -134,15 +147,42 @@ local function safeCall(fn, fallback)
   return fallback
 end
 
+local decisionDataLoadError = nil
+
+local function loadDecisionData()
+  if type(Civ6CopilotDecisionData) == "table" then
+    return Civ6CopilotDecisionData
+  end
+  if type(include) ~= "function" then
+    decisionDataLoadError = "include-unavailable"
+    return nil
+  end
+  local loaded = pcall(include, "civ6_ai_copilot_decision_data")
+  if not loaded then
+    decisionDataLoadError = "include-failed"
+    return nil
+  end
+  if type(Civ6CopilotDecisionData) ~= "table" then
+    decisionDataLoadError = "module-not-defined"
+    return nil
+  end
+  return Civ6CopilotDecisionData
+end
+
+local decisionData = loadDecisionData()
+
 local function setStatus(message)
-  if Controls and Controls.StatusLabel then
-    Controls.StatusLabel:SetText(message)
+  currentStatus = message
+  local visibleStatus = syncProgressStatus or autoSyncStatus or currentStatus
+  if Controls and Controls.StatusLabel and visibleStatus ~= nil then
+    Controls.StatusLabel:SetText(visibleStatus)
   end
 end
 
-local function lookupText(key)
+local function lookupText(key, ...)
+  local values = { ... }
   return safeCall(function()
-    return Locale.Lookup(key)
+		return Locale.Lookup(key, unpackValues(values))
   end, key) or key
 end
 
@@ -153,15 +193,8 @@ local function setLastExportStatus(message)
 end
 
 local function setAutoSyncStatus(message)
-  if Controls and Controls.AutoSyncStatusLabel then
-    Controls.AutoSyncStatusLabel:SetText(message)
-    Controls.AutoSyncStatusLabel:SetHide(
-      message == nil
-      or message == ""
-      or message == lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF")
-      or message == "回合开始后自动汇总"
-    )
-  end
+  autoSyncStatus = message ~= "" and message or nil
+  setStatus(currentStatus)
 end
 
 local function refreshAutoSyncButton()
@@ -170,44 +203,14 @@ local function refreshAutoSyncButton()
   end
 end
 
-local function setControlHidden(control, hidden)
-  if control and control.SetHide then
-    control:SetHide(hidden)
-  end
-end
-
-local function setSyncProgress(message, done, total)
-  if Controls == nil then
-    return
-  end
-
-  setControlHidden(Controls.SyncProgressLabel, false)
-  setControlHidden(Controls.SyncProgressTrack, false)
-  if Controls.SyncProgressLabel then
-    Controls.SyncProgressLabel:SetText(message or "正在汇总…")
-  end
-
-  local width = 1
-  if type(done) == "number" and type(total) == "number" and total > 0 then
-    local ratio = done / total
-    if ratio < 0 then ratio = 0 end
-    if ratio > 1 then ratio = 1 end
-    width = math.max(1, math.floor(PROGRESS_BAR_WIDTH * ratio))
-  end
-  if Controls.SyncProgressFill and Controls.SyncProgressFill.SetSizeX then
-    Controls.SyncProgressFill:SetSizeX(width)
-  end
+local function setSyncProgress(message)
+  syncProgressStatus = message or lookupText("LOC_CIV6_AI_COPILOT_STATUS_UPDATING")
+  setStatus(currentStatus)
 end
 
 local function clearSyncProgress()
-  if Controls == nil then
-    return
-  end
-  setControlHidden(Controls.SyncProgressLabel, true)
-  setControlHidden(Controls.SyncProgressTrack, true)
-  if Controls.SyncProgressFill and Controls.SyncProgressFill.SetSizeX then
-    Controls.SyncProgressFill:SetSizeX(1)
-  end
+  syncProgressStatus = nil
+  setStatus(currentStatus)
 end
 
 local function nowUtc()
@@ -267,6 +270,10 @@ local function appendValue(out, value)
 end
 
 local function jsonWrite(out, value)
+  if value == JSON_NULL then
+    appendValue(out, "null")
+    return
+  end
   local valueType = type(value)
   if valueType == "nil" then
     appendValue(out, "null")
@@ -346,293 +353,11 @@ local function base64Encode(data)
   return table.concat(out)
 end
 
-local UINT32 = 4294967296
-
-local function uint32(value)
-  return value % UINT32
-end
-
-local function arithmeticBand(a, b)
-  a = uint32(a)
-  b = uint32(b)
-  local result = 0
-  local bitValue = 1
-  while a > 0 and b > 0 do
-    local aBit = a % 2
-    local bBit = b % 2
-    if aBit == 1 and bBit == 1 then
-      result = result + bitValue
-    end
-    a = (a - aBit) / 2
-    b = (b - bBit) / 2
-    bitValue = bitValue * 2
-  end
-  return result
-end
-
-local function arithmeticBor(a, b)
-  a = uint32(a)
-  b = uint32(b)
-  local result = 0
-  local bitValue = 1
-  while a > 0 or b > 0 do
-    local aBit = a % 2
-    local bBit = b % 2
-    if aBit == 1 or bBit == 1 then
-      result = result + bitValue
-    end
-    a = (a - aBit) / 2
-    b = (b - bBit) / 2
-    bitValue = bitValue * 2
-  end
-  return uint32(result)
-end
-
-local function arithmeticBxor(a, b)
-  a = uint32(a)
-  b = uint32(b)
-  local result = 0
-  local bitValue = 1
-  while a > 0 or b > 0 do
-    local aBit = a % 2
-    local bBit = b % 2
-    if aBit ~= bBit then
-      result = result + bitValue
-    end
-    a = (a - aBit) / 2
-    b = (b - bBit) / 2
-    bitValue = bitValue * 2
-  end
-  return uint32(result)
-end
-
-local function arithmeticRshift(a, b)
-  return math.floor(uint32(a) / 2 ^ b)
-end
-
-local function arithmeticLshift(a, b)
-  return uint32(uint32(a) * 2 ^ b)
-end
-
-local function band(a, b)
-  if bitlib and bitlib.band then
-    return uint32(bitlib.band(a, b))
-  end
-  return arithmeticBand(a, b)
-end
-
-local function bor(a, b)
-  if bitlib and bitlib.bor then
-    return uint32(bitlib.bor(a, b))
-  end
-  return arithmeticBor(a, b)
-end
-
-local function bxor(a, b, c, d)
-  local function bxor2(left, right)
-    if bitlib and bitlib.bxor then
-      return uint32(bitlib.bxor(left, right))
-    end
-    return arithmeticBxor(left, right)
-  end
-
-  local value = bxor2(a, b)
-  if c ~= nil then
-    value = bxor2(value, c)
-  end
-  if d ~= nil then
-    value = bxor2(value, d)
-  end
-  return value
-end
-
-local function bnot(a)
-  if bitlib and bitlib.bnot then
-    return uint32(bitlib.bnot(a))
-  end
-  return uint32(0xffffffff - uint32(a))
-end
-
-local function rshift(a, b)
-  if bitlib and bitlib.rshift then
-    return uint32(bitlib.rshift(a, b))
-  end
-  return arithmeticRshift(a, b)
-end
-
-local function lshift(a, b)
-  if bitlib and bitlib.lshift then
-    return uint32(bitlib.lshift(a, b))
-  end
-  return arithmeticLshift(a, b)
-end
-
-local function rrotate(a, b)
-  if bitlib and bitlib.rrotate then
-    return uint32(bitlib.rrotate(a, b))
-  end
-  return band(bor(rshift(a, b), lshift(a, 32 - b)), 0xffffffff)
-end
-
-local function add32(...)
-  local sum = 0
-  for _, value in ipairs({ ... }) do
-    sum = (sum + value) % 4294967296
-  end
-  return sum
-end
-
-local function wordToHex(value)
-  value = uint32(value)
-  return string.format(
-    "%02x%02x%02x%02x",
-    band(rshift(value, 24), 0xff),
-    band(rshift(value, 16), 0xff),
-    band(rshift(value, 8), 0xff),
-    band(value, 0xff)
-  )
-end
-
-local sha256K = {
-  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
-}
-
-local function createSha256Hasher(message)
-  local messageLength = #message
-  local zeroPadding = (56 - ((messageLength + 1) % 64)) % 64
-  return {
-    message = message,
-    messageLength = messageLength,
-    zeroPadding = zeroPadding,
-    totalBlocks = (messageLength + 1 + zeroPadding + 8) / 64,
-    blockIndex = 0,
-    h0 = 0x6a09e667,
-    h1 = 0xbb67ae85,
-    h2 = 0x3c6ef372,
-    h3 = 0xa54ff53a,
-    h4 = 0x510e527f,
-    h5 = 0x9b05688c,
-    h6 = 0x1f83d9ab,
-    h7 = 0x5be0cd19,
-    done = false,
-    digest = nil
-  }
-end
-
-local function sha256HasherByte(hasher, position)
-  if position <= hasher.messageLength then
-    return hasher.message:byte(position) or 0
-  end
-  if position == hasher.messageLength + 1 then
-    return 0x80
-  end
-  if position <= hasher.messageLength + 1 + hasher.zeroPadding then
-    return 0
-  end
-
-  local bitLength = hasher.messageLength * 8
-  local high = math.floor(bitLength / UINT32)
-  local low = bitLength % UINT32
-  local lengthByteIndex = position - (hasher.messageLength + 1 + hasher.zeroPadding)
-  if lengthByteIndex == 1 then return band(rshift(high, 24), 0xff) end
-  if lengthByteIndex == 2 then return band(rshift(high, 16), 0xff) end
-  if lengthByteIndex == 3 then return band(rshift(high, 8), 0xff) end
-  if lengthByteIndex == 4 then return band(high, 0xff) end
-  if lengthByteIndex == 5 then return band(rshift(low, 24), 0xff) end
-  if lengthByteIndex == 6 then return band(rshift(low, 16), 0xff) end
-  if lengthByteIndex == 7 then return band(rshift(low, 8), 0xff) end
-  return band(low, 0xff)
-end
-
-local function finishSha256Hasher(hasher)
-  hasher.done = true
-  hasher.digest = wordToHex(hasher.h0)
-    .. wordToHex(hasher.h1)
-    .. wordToHex(hasher.h2)
-    .. wordToHex(hasher.h3)
-    .. wordToHex(hasher.h4)
-    .. wordToHex(hasher.h5)
-    .. wordToHex(hasher.h6)
-    .. wordToHex(hasher.h7)
-  return hasher.digest
-end
-
-local function stepSha256Hasher(hasher, maxBlocks)
-  if hasher.done then
-    return true, hasher.digest
-  end
-
-  local processed = 0
-  while hasher.blockIndex < hasher.totalBlocks and processed < maxBlocks do
-    local offset = hasher.blockIndex * 64 + 1
-    local w = {}
-    for i = 0, 15 do
-      local j = offset + i * 4
-      w[i] = add32(
-        sha256HasherByte(hasher, j) * 0x1000000,
-        sha256HasherByte(hasher, j + 1) * 0x10000,
-        sha256HasherByte(hasher, j + 2) * 0x100,
-        sha256HasherByte(hasher, j + 3)
-      )
-    end
-    for i = 16, 63 do
-      local s0 = bxor(rrotate(w[i - 15], 7), rrotate(w[i - 15], 18), rshift(w[i - 15], 3))
-      local s1 = bxor(rrotate(w[i - 2], 17), rrotate(w[i - 2], 19), rshift(w[i - 2], 10))
-      w[i] = add32(w[i - 16], s0, w[i - 7], s1)
-    end
-
-    local a, b, c, d, e, f, g, h = hasher.h0, hasher.h1, hasher.h2, hasher.h3, hasher.h4, hasher.h5, hasher.h6, hasher.h7
-    for i = 0, 63 do
-      local s1 = bxor(rrotate(e, 6), rrotate(e, 11), rrotate(e, 25))
-      local ch = bxor(band(e, f), band(bnot(e), g))
-      local temp1 = add32(h, s1, ch, sha256K[i + 1], w[i])
-      local s0 = bxor(rrotate(a, 2), rrotate(a, 13), rrotate(a, 22))
-      local maj = bxor(band(a, b), band(a, c), band(b, c))
-      local temp2 = add32(s0, maj)
-      h, g, f, e, d, c, b, a = g, f, e, add32(d, temp1), c, b, a, add32(temp1, temp2)
-    end
-
-    hasher.h0, hasher.h1, hasher.h2, hasher.h3 = add32(hasher.h0, a), add32(hasher.h1, b), add32(hasher.h2, c), add32(hasher.h3, d)
-    hasher.h4, hasher.h5, hasher.h6, hasher.h7 = add32(hasher.h4, e), add32(hasher.h5, f), add32(hasher.h6, g), add32(hasher.h7, h)
-    hasher.blockIndex = hasher.blockIndex + 1
-    processed = processed + 1
-  end
-
-  if hasher.blockIndex >= hasher.totalBlocks then
-    return true, finishSha256Hasher(hasher)
-  end
-  return false, nil
-end
-
-local function sha256(message)
-  local hasher = createSha256Hasher(message)
-  while true do
-    local done, digest = stepSha256Hasher(hasher, hasher.totalBlocks)
-    if done then
-      return digest
-    end
-  end
-end
-
 local function base64SelfTestOk()
   return safeCall(function()
     return base64Encode("abc") == "YWJj"
   end, false)
 end
-
-local function sha256SelfTestOk()
-  return safeCall(function()
-    return sha256("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-  end, false)
-end
-
 local function emitDiagnostic(reason, extra)
   local localPlayerId = safeCall(function()
     return Game and Game.GetLocalPlayer and Game.GetLocalPlayer()
@@ -652,9 +377,7 @@ local function emitDiagnostic(reason, extra)
     compatVersion = COMPAT_VERSION,
     protocolVersion = PROTOCOL_VERSION,
     reason = reason,
-    hasBitlib = bitlib ~= nil,
     base64SelfTest = base64SelfTestOk(),
-    sha256SelfTest = sha256SelfTestOk(),
     hasControls = Controls ~= nil,
     hasGame = Game ~= nil,
     hasPlayers = Players ~= nil,
@@ -691,7 +414,6 @@ local function cacheLatestExport(begin, beginJson, chunkJsons, endJson, diagnost
     schemaVersion = begin.schemaVersion,
     chunkCount = begin.chunkCount,
     byteLength = begin.byteLength,
-    checksumSha256 = begin.checksumSha256,
     beginJson = beginJson,
     chunkJsons = chunkJsons,
     endJson = endJson,
@@ -763,7 +485,8 @@ local function gameInfoRowByHash(tableName, hashValue, typeField)
 end
 
 local function productionNamedType(productionHash)
-  if type(productionHash) ~= "number" or productionHash < 0 then
+  if productionHash == 0 then return namedType("NO_PRODUCTION", "待选生产") end
+  if type(productionHash) ~= "number" then
     return namedType("UNKNOWN_PRODUCTION", "未知生产")
   end
 
@@ -783,6 +506,44 @@ local function productionNamedType(productionHash)
   return namedType("UNKNOWN_PRODUCTION", "未知生产")
 end
 
+local function currentProductionProgressAndCost(queue, productionHash)
+  if queue == nil or type(productionHash) ~= "number" or productionHash == 0 then
+    return nil, nil
+  end
+
+  local productionTables = {
+    { tableName = "Units", typeField = "UnitType", progress = "GetUnitProgress", cost = "GetUnitCost" },
+    { tableName = "Buildings", typeField = "BuildingType", progress = "GetBuildingProgress", cost = "GetBuildingCost" },
+    { tableName = "Districts", typeField = "DistrictType", progress = "GetDistrictProgress", cost = "GetDistrictCost" },
+    { tableName = "Projects", typeField = "ProjectType", progress = "GetProjectProgress", cost = "GetProjectCost" }
+  }
+  for _, config in ipairs(productionTables) do
+    local row = gameInfoRowByHash(config.tableName, productionHash, config.typeField)
+    if row ~= nil and type(row.Index) == "number" then
+      local progress = safeCall(function()
+        return queue[config.progress](queue, row.Index)
+      end, nil)
+      local costGetter = config.cost
+      if config.tableName == "Units" then
+        local formation = safeCall(function()
+          return queue:GetCurrentProductionTypeModifier()
+        end, nil)
+        if MilitaryFormationTypes and formation == MilitaryFormationTypes.CORPS_FORMATION then
+          costGetter = "GetUnitCorpsCost"
+        elseif MilitaryFormationTypes and formation == MilitaryFormationTypes.ARMY_FORMATION then
+          costGetter = "GetUnitArmyCost"
+        end
+      end
+      local cost = safeCall(function()
+        return queue[costGetter](queue, row.Index)
+      end, nil)
+      return type(progress) == "number" and progress >= 0 and progress or nil,
+        type(cost) == "number" and cost >= 0 and cost or nil
+    end
+  end
+  return nil, nil
+end
+
 local function nonNegativeIntegerOrNil(value)
   if type(value) == "number" and value >= 0 then
     return math.floor(value)
@@ -790,10 +551,26 @@ local function nonNegativeIntegerOrNil(value)
   return nil
 end
 
+local function nonNegativeFiniteNumberOrNil(value)
+  if type(value) ~= "number" or value ~= value or value == math.huge or value == -math.huge or value < 0 then
+    return nil
+  end
+  return value
+end
+
+local function nonNegativeFiniteIntegerOrNil(value)
+  local number = nonNegativeFiniteNumberOrNil(value)
+  if number ~= nil and number % 1 == 0 then
+    return number
+  end
+  return nil
+end
+
 local function getLocalPlayerId()
-  return safeCall(function()
+  local id = safeCall(function()
     return Game.GetLocalPlayer()
-  end, 0) or 0
+  end, nil)
+  return type(id) == "number" and id or -1
 end
 
 local function unitSnapshotEntry(unit, ownerPlayerId, visibilityKind, confidenceKind)
@@ -805,7 +582,7 @@ local function unitSnapshotEntry(unit, ownerPlayerId, visibilityKind, confidence
   end, nil)
   local unitType = getGameInfoType("Units", unitTypeIndex, "UnitType") or tostring(unitTypeIndex or "UNKNOWN_UNIT")
 
-  return {
+  local entry = {
     source = "lua-api",
     visibility = visibilityKind,
     confidence = confidenceKind,
@@ -823,14 +600,99 @@ local function unitSnapshotEntry(unit, ownerPlayerId, visibilityKind, confidence
     end, 0),
     damage = safeCall(function()
       return unit:GetDamage()
-    end, 0),
-    movesRemaining = safeCall(function()
-      return unit:GetMovesRemaining()
-    end, 0),
-    formationClass = tostring(safeCall(function()
-      return unit:GetFormationClass()
-    end, "UNKNOWN"))
+    end, nil)
   }
+  if ownerPlayerId == getLocalPlayerId() then
+    local movesRemaining = safeCall(function()
+      return unit:GetMovesRemaining()
+    end, nil)
+    if type(movesRemaining) == "number" and movesRemaining >= 0 then
+      entry.movesRemaining = movesRemaining
+    end
+    local formationClass = safeCall(function()
+      return unit:GetFormationClass()
+    end, nil)
+    if formationClass ~= nil then
+      entry.formationClass = tostring(formationClass)
+    end
+    for fieldName, methodName in pairs({
+      combatStrength = "GetCombat",
+      rangedStrength = "GetRangedCombat",
+      bombardStrength = "GetBombardCombat",
+      range = "GetRange",
+      maxMoves = "GetMaxMoves",
+      buildCharges = "GetBuildCharges",
+      militaryFormation = "GetMilitaryFormation",
+      upgradeCost = "GetUpgradeCost"
+    }) do
+      local strength = safeCall(function()
+        return unit[methodName](unit)
+      end, nil)
+      if fieldName == "militaryFormation" and strength ~= nil and MilitaryFormationTypes then
+        if strength == MilitaryFormationTypes.STANDARD_FORMATION then
+          entry.militaryFormation = "standard"
+        elseif strength == MilitaryFormationTypes.CORPS_FORMATION then
+          entry.militaryFormation = "corps"
+        elseif strength == MilitaryFormationTypes.ARMY_FORMATION then
+          entry.militaryFormation = "army"
+        end
+      elseif fieldName == "buildCharges" then
+        local charges = nonNegativeFiniteIntegerOrNil(strength)
+        if charges ~= nil then entry[fieldName] = charges end
+      elseif (fieldName == "range" or fieldName == "maxMoves" or fieldName == "upgradeCost"
+          or fieldName == "combatStrength" or fieldName == "rangedStrength" or fieldName == "bombardStrength")
+          then
+        local value = nonNegativeFiniteNumberOrNil(strength)
+        if value ~= nil then entry[fieldName] = value end
+      end
+    end
+    local experience = safeCall(function()
+      return unit:GetExperience()
+    end, nil)
+    for fieldName, methodName in pairs({
+      experience = "GetExperiencePoints",
+      experienceForNextLevel = "GetExperienceForNextLevel",
+      level = "GetLevel"
+    }) do
+      local value = safeCall(function()
+        return experience and experience[methodName](experience)
+      end, nil)
+      if fieldName == "level" then
+        value = nonNegativeFiniteIntegerOrNil(value)
+      else
+        value = nonNegativeFiniteNumberOrNil(value)
+      end
+      if type(value) == "number" then
+        entry[fieldName] = value
+      end
+    end
+    local promotions = safeCall(function()
+      return experience and experience:GetPromotions()
+    end, nil)
+    if type(promotions) == "table" then
+      local promotionEntries = jsonArray({})
+      for _, promotionIndex in ipairs(promotions) do
+        local promotionRow = safeCall(function()
+          return GameInfo and GameInfo.UnitPromotions and GameInfo.UnitPromotions[promotionIndex]
+        end, nil)
+        if promotionRow and promotionRow.UnitPromotionType then
+          local promotion = { type = promotionRow.UnitPromotionType }
+          local name = safeCall(function()
+            return promotionRow.Name and Locale.Lookup(promotionRow.Name)
+          end, nil)
+          if type(name) == "string" and name ~= "" then
+            promotion.name = name
+          end
+          table.insert(promotionEntries, promotion)
+        end
+      end
+      entry.promotions = promotionEntries
+    end
+  end
+  if type(entry.damage) ~= "number" then
+    entry.damage = nil
+  end
+  return entry
 end
 
 local function collectLocalPlayer(localPlayerId)
@@ -847,7 +709,6 @@ local function collectLocalPlayer(localPlayerId)
     visibility = "own",
     confidence = player and "confirmed" or "low",
     localPlayerId = localPlayerId,
-    localPlayerNameHash = "sha256:" .. sha256("local-player-" .. tostring(localPlayerId)),
     civilizationType = civilizationType,
     leaderType = leaderType,
     isHuman = safeCall(function()
@@ -878,12 +739,121 @@ local function collectCities(localPlayerId)
       local queue = city:GetBuildQueue()
       return queue and queue:GetCurrentProductionTypeHash()
     end, nil)
+    local buildQueue = safeCall(function()
+      return city:GetBuildQueue()
+    end, nil)
+    local productionProgress, productionCost = currentProductionProgressAndCost(buildQueue, productionType)
     local turnsUntilComplete = nonNegativeIntegerOrNil(safeCall(function()
       local queue = city:GetBuildQueue()
       return queue and queue:GetTurnsLeft()
     end, nil))
+    local yields = jsonObject({})
+    local wantedYields = {
+      YIELD_FOOD = true,
+      YIELD_PRODUCTION = true,
+      YIELD_GOLD = true,
+      YIELD_SCIENCE = true,
+      YIELD_CULTURE = true,
+      YIELD_FAITH = true
+    }
+    if GameInfo and GameInfo.Yields then
+      safeCall(function()
+        for row in GameInfo.Yields() do
+          if row and wantedYields[row.YieldType] and type(row.Index) == "number" then
+            local amount = safeCall(function()
+              return city:GetYield(row.Index)
+            end, nil)
+            if type(amount) == "number" then
+              yields[row.YieldType] = amount
+            end
+          end
+        end
+      end, nil)
+    end
+    local growth = safeCall(function()
+      return city:GetGrowth()
+    end, nil)
+    local housing = safeCall(function() return growth and growth:GetHousing() end, nil)
+    local amenities = safeCall(function() return growth and growth:GetAmenities() end, nil)
+    local amenitiesNeeded = safeCall(function() return growth and growth:GetAmenitiesNeeded() end, nil)
+    local turnsUntilGrowth = nonNegativeIntegerOrNil(safeCall(function()
+      return growth and growth:GetTurnsUntilGrowth()
+    end, nil))
+    local turnsUntilStarvation = nonNegativeIntegerOrNil(safeCall(function()
+      return growth and growth:GetTurnsUntilStarvation()
+    end, nil))
+    local foodStock = safeCall(function() return growth and growth:GetFood() end, nil)
+    local foodSurplus = safeCall(function() return growth and growth:GetFoodSurplus() end, nil)
+    local growthThreshold = safeCall(function() return growth and growth:GetGrowthThreshold() end, nil)
 
-    table.insert(cities, {
+    local districtsComponent = safeCall(function()
+      return city:GetDistricts()
+    end, nil)
+    local populationLimitedDistrictsUsed = safeCall(function()
+      return districtsComponent:GetNumZonedDistrictsRequiringPopulation()
+    end, nil)
+    local populationLimitedDistrictsCapacity = safeCall(function()
+      return districtsComponent:GetNumAllowedDistrictsRequiringPopulation()
+    end, nil)
+    populationLimitedDistrictsUsed = nonNegativeIntegerOrNil(populationLimitedDistrictsUsed)
+    populationLimitedDistrictsCapacity = nonNegativeIntegerOrNil(populationLimitedDistrictsCapacity)
+    local districts = nil
+    if districtsComponent and type(districtsComponent.Members) == "function" then
+      local districtEntries = jsonArray({})
+      local districtsOk = pcall(function()
+        for _, district in districtsComponent:Members() do
+          local districtIndex = district:GetType()
+          local districtRow = GameInfo and GameInfo.Districts and GameInfo.Districts[districtIndex]
+          if type(districtIndex) ~= "number" or districtRow == nil or districtRow.DistrictType == nil then
+            error("district type could not be resolved")
+          end
+          local districtEntry = namedGameInfoEntry(districtRow, "DistrictType", "UNKNOWN_DISTRICT", "未知区域")
+          local hasDistrictOk, isBuilt = pcall(function()
+            return districtsComponent:HasDistrict(districtRow.Index, true)
+          end)
+          if hasDistrictOk and type(isBuilt) == "boolean" then districtEntry.isBuilt = isBuilt end
+          table.insert(districtEntries, districtEntry)
+        end
+      end)
+      if districtsOk then
+        districts = districtEntries
+      end
+    end
+
+    local buildingsComponent = safeCall(function()
+      return city:GetBuildings()
+    end, nil)
+    local buildings = nil
+    local buildingReads = 0
+    if buildingsComponent and type(buildingsComponent.HasBuilding) == "function" and GameInfo and GameInfo.Buildings then
+      local buildingEntries = jsonArray({})
+      local buildingsOk = pcall(function()
+        for row in GameInfo.Buildings() do
+          if row == nil or type(row.Index) ~= "number" or row.BuildingType == nil then
+            error("building type could not be resolved")
+          end
+          local queryOk, hasBuilding = pcall(function()
+            return buildingsComponent:HasBuilding(row.Index)
+          end)
+          if not queryOk or type(hasBuilding) ~= "boolean" then
+            error("building state could not be read")
+          end
+          buildingReads = buildingReads + 1
+          if hasBuilding then
+            table.insert(buildingEntries, namedGameInfoEntry(row, "BuildingType", "UNKNOWN_BUILDING", "未知建筑"))
+          end
+        end
+      end)
+      if buildingsOk and buildingReads > 0 then buildings = buildingEntries end
+    end
+
+    local underSiege = safeCall(function()
+      local playerDistricts = player:GetDistricts()
+      local mainDistrict = playerDistricts and playerDistricts:FindID(city:GetDistrictID())
+      return mainDistrict and mainDistrict:IsUnderSiege()
+    end, nil)
+
+    local cityEntry = {
       source = "lua-api",
       visibility = "own",
       confidence = "confirmed",
@@ -903,10 +873,77 @@ local function collectCities(localPlayerId)
       end, 1),
       currentProduction = productionNamedType(productionType),
       turnsUntilComplete = turnsUntilComplete,
-      yields = jsonObject({})
-    })
+      yields = yields
+    }
+    if type(housing) == "number" then cityEntry.housing = housing end
+    if type(amenities) == "number" then cityEntry.amenities = amenities end
+    if type(amenitiesNeeded) == "number" then cityEntry.amenitiesNeeded = amenitiesNeeded end
+    if turnsUntilGrowth ~= nil then cityEntry.turnsUntilGrowth = turnsUntilGrowth end
+    if turnsUntilStarvation ~= nil then cityEntry.turnsUntilStarvation = turnsUntilStarvation end
+    if type(productionProgress) == "number" and productionProgress >= 0 then cityEntry.currentProductionProgress = productionProgress end
+    if type(productionCost) == "number" and productionCost >= 0 then cityEntry.currentProductionCost = productionCost end
+    if type(foodStock) == "number" and foodStock >= 0 then cityEntry.foodStock = foodStock end
+    if type(foodSurplus) == "number" then cityEntry.foodSurplus = foodSurplus end
+    if type(growthThreshold) == "number" and growthThreshold >= 0 then cityEntry.growthThreshold = growthThreshold end
+    if type(populationLimitedDistrictsUsed) == "number" then cityEntry.populationLimitedDistrictsUsed = populationLimitedDistrictsUsed end
+    if type(populationLimitedDistrictsCapacity) == "number" then cityEntry.populationLimitedDistrictsCapacity = populationLimitedDistrictsCapacity end
+    if type(underSiege) == "boolean" then cityEntry.underSiege = underSiege end
+    if buildings ~= nil then cityEntry.buildings = buildings end
+    if districts ~= nil then cityEntry.districts = districts end
+    table.insert(cities, cityEntry)
   end
   return cities
+end
+
+local function selectedEntity(getterName, localPlayerId, idPrefix)
+  local getter = safeCall(function()
+    return UI and UI[getterName]
+  end, nil)
+  if type(getter) ~= "function" then
+    return { status = "unsupported", id = JSON_NULL }
+  end
+
+  local ok, entity = pcall(getter)
+  if not ok then
+    return { status = "error", id = JSON_NULL }
+  end
+  if entity == nil then
+    return { status = "none", id = JSON_NULL }
+  end
+
+  local ownerPlayerId = safeCall(function()
+    return entity:GetOwner()
+  end, nil)
+  if type(ownerPlayerId) ~= "number" then
+    return { status = "error", id = JSON_NULL }
+  end
+  if ownerPlayerId ~= localPlayerId then
+    return { status = "none", id = JSON_NULL }
+  end
+
+  local entityId = safeCall(function()
+    return entity:GetID()
+  end, nil)
+  if type(entityId) ~= "number" then
+    return { status = "error", id = JSON_NULL }
+  end
+  return { status = "selected", id = idPrefix .. tostring(localPlayerId) .. "-" .. tostring(entityId) }
+end
+
+local function collectSelection(localPlayerId)
+  local city = selectedEntity("GetHeadSelectedCity", localPlayerId, "city-")
+  local unit = selectedEntity("GetHeadSelectedUnit", localPlayerId, "unit-")
+  local confidence = "confirmed"
+  if city.status == "unsupported" or city.status == "error" or unit.status == "unsupported" or unit.status == "error" then
+    confidence = "low"
+  end
+  return {
+    source = "lua-api",
+    visibility = "own",
+    confidence = confidence,
+    city = city,
+    unit = unit
+  }
 end
 
 local function collectUnits(localPlayerId)
@@ -942,9 +979,10 @@ local function appendMissingUnits(targetUnits, sourceUnits)
   end
 end
 
-local function collectUnitsInVisiblePlot(plot, localPlayerId, seenUnitIds)
+local function collectUnitsInVisiblePlot(plot, localPlayerId, seenUnitIds, playerVisibility)
   local unitIds = jsonArray({})
   local visibleForeignUnits = jsonArray({})
+  local unverifiedForeignUnit = false
   local plotUnits = safeCall(function()
     if Units and Units.GetUnitsInPlot then
       return Units.GetUnitsInPlot(plot)
@@ -953,14 +991,29 @@ local function collectUnitsInVisiblePlot(plot, localPlayerId, seenUnitIds)
   end, nil)
 
   if type(plotUnits) ~= "table" then
-    return unitIds, visibleForeignUnits
+    return unitIds, visibleForeignUnits, true
   end
 
   for _, unit in pairs(plotUnits) do
     local ownerPlayerId = safeCall(function()
       return unit:GetOwner()
     end, nil)
-    if ownerPlayerId ~= nil then
+    local isOwnUnit = ownerPlayerId == localPlayerId
+    local unitVisible = isOwnUnit
+    if ownerPlayerId ~= nil and not isOwnUnit then
+      if playerVisibility and type(playerVisibility.IsUnitVisible) == "function" then
+        local checkOk, isUnitVisible = pcall(function()
+          return playerVisibility:IsUnitVisible(unit)
+        end)
+        unitVisible = checkOk and isUnitVisible == true
+        if not checkOk or type(isUnitVisible) ~= "boolean" then
+          unverifiedForeignUnit = true
+        end
+      else
+        unverifiedForeignUnit = true
+      end
+    end
+    if ownerPlayerId ~= nil and unitVisible then
       local snapshotUnit = unitSnapshotEntry(
         unit,
         ownerPlayerId,
@@ -975,7 +1028,7 @@ local function collectUnitsInVisiblePlot(plot, localPlayerId, seenUnitIds)
     end
   end
 
-  return unitIds, visibleForeignUnits
+  return unitIds, visibleForeignUnits, unverifiedForeignUnit
 end
 
 local function gameInfoTypeNameByIndex(tableName, typeField, index)
@@ -1084,6 +1137,22 @@ local function plotCliffEdges(plot)
   return nil
 end
 
+local yieldDescriptors = nil
+local function getYieldDescriptors()
+  if yieldDescriptors ~= nil then return yieldDescriptors end
+  local rows = {}
+  local ok = safeCall(function()
+    for row in GameInfo.Yields() do
+      if type(row.Index) == "number" and row.YieldType then
+        table.insert(rows, { Index = row.Index, YieldType = row.YieldType })
+      end
+    end
+    return true
+  end, false)
+  if ok then yieldDescriptors = rows end
+  return rows
+end
+
 local function plotYields(plot)
   if plot == nil or GameInfo == nil or GameInfo.Yields == nil then
     return nil
@@ -1092,7 +1161,7 @@ local function plotYields(plot)
   local yields = jsonObject({})
   local hasYield = false
   safeCall(function()
-    for row in GameInfo.Yields() do
+    for _, row in ipairs(getYieldDescriptors()) do
       if row and row.YieldType ~= nil and type(row.Index) == "number" then
         local amount = safeCall(function()
           return plot:GetYield(row.Index)
@@ -1139,11 +1208,6 @@ local function enrichTilePlanningFields(tile, plot)
     tile.appeal = appeal
   end
 
-  local resourceAmount = plotOptionalNumber(plot, "GetResourceCount")
-  if resourceAmount ~= nil and resourceAmount > 0 then
-    tile.resourceAmount = resourceAmount
-  end
-
   local improvementType = plotIndexedType(plot, "GetImprovementType", "Improvements", "ImprovementType")
   if improvementType ~= nil then
     tile.improvementType = improvementType
@@ -1170,7 +1234,7 @@ local function enrichTilePlanningFields(tile, plot)
   end
 end
 
-local function visiblePlotResourceType(plot, localPlayerId)
+local function visiblePlotResourceType(plot, playerResources)
   local resourceIndex = safeCall(function()
     return plot and plot:GetResourceType()
   end, -1)
@@ -1186,10 +1250,6 @@ local function visiblePlotResourceType(plot, localPlayerId)
     return nil
   end
 
-  local player = Players and Players[localPlayerId]
-  local playerResources = player and safeCall(function()
-    return player:GetResources()
-  end, nil) or nil
   if playerResources == nil then
     return nil
   end
@@ -1204,17 +1264,50 @@ local function visiblePlotResourceType(plot, localPlayerId)
   return nil
 end
 
+local function ownAnchorPositions(localPlayerId)
+  local anchors = {}
+  local player = Players and Players[localPlayerId]
+  if not player then return anchors end
+
+  for _, getterName in ipairs({ "GetCities", "GetUnits" }) do
+    local members = safeCall(function()
+      return player[getterName](player)
+    end, nil)
+    if members and members.Members then
+      for _, entity in members:Members() do
+        local x = safeCall(function() return entity:GetX() end, nil)
+        local y = safeCall(function() return entity:GetY() end, nil)
+        if type(x) == "number" and type(y) == "number" then
+          table.insert(anchors, { x = x, y = y })
+        end
+      end
+    end
+  end
+  return anchors
+end
+
 local function createVisibleMapCollector(localPlayerId)
   local collector = {
     tiles = jsonArray({}),
     visibleForeignUnits = jsonArray({}),
     seenVisibleForeignUnitIds = {},
+    visibleCoords = {},
+    nearbyCoords = {},
+    otherCoords = {},
+    selectedCoords = {},
+    anchors = ownAnchorPositions(localPlayerId),
+    nearKeys = {},
     revealedTileCount = 0,
     truncated = false,
     bounds = nil,
+    scanIndex = 0,
+    detailIndex = 1,
     x = 0,
     y = 0,
-    done = false
+    phase = "scan",
+    done = false,
+    foreignUnitVisibilityUnverified = false,
+    localPlayerId = localPlayerId
   }
 
   collector.visibility = safeCall(function()
@@ -1226,129 +1319,187 @@ local function createVisibleMapCollector(localPlayerId)
     end
     return nil
   end, nil)
-
+  collector.foreignUnitVisibilityUnverified = not (collector.visibility and collector.visibility.IsUnitVisible and Units and Units.GetUnitsInPlot)
+  collector.playerResources = safeCall(function()
+    local player = Players and Players[localPlayerId]
+    return player and player:GetResources()
+  end, nil)
   collector.width, collector.height = safeCall(function()
     return Map.GetGridSize()
   end, 0)
   collector.width = collector.width or 0
   collector.height = collector.height or 0
 
-  function collector:result()
-    if not self.visibility or not Map or self.width == 0 then
-      return {
-        source = "lua-api",
-        visibility = "player-visible",
-        confidence = "low",
-        scope = "player-visible-revealed",
-        truncated = false,
-        tileLimit = VISIBLE_MAP_TILE_LIMIT,
-        revealedTileCount = 0,
-        tiles = self.tiles
-      }, self.visibleForeignUnits
+  for _, anchor in ipairs(collector.anchors) do
+    for dy = -3, 3 do
+      for dx = -3, 3 do
+        local y = anchor.y + dy
+        local x = anchor.x + dx
+        if x >= 0 and y >= 0 and x < collector.width and y < collector.height then
+          collector.nearKeys[tostring(x) .. "," .. tostring(y)] = true
+        end
+      end
     end
+  end
 
+  function collector:result()
+    local confidence = (self.visibility and Map and self.width > 0) and "confirmed" or "low"
+    if self.foreignUnitVisibilityUnverified then confidence = "low" end
     return {
       source = "lua-api",
       visibility = "player-visible",
-      confidence = "confirmed",
+      confidence = confidence,
       scope = "player-visible-revealed",
       truncated = self.truncated,
       tileLimit = VISIBLE_MAP_TILE_LIMIT,
       revealedTileCount = self.revealedTileCount,
       bounds = self.bounds,
       tiles = self.tiles
-    }, self.visibleForeignUnits
+    }, self.visibleForeignUnits, self.foreignUnitVisibilityUnverified
   end
 
   function collector:progress()
-    local total = math.max(1, self.width * self.height)
-    local done = math.min(total, self.y * self.width + self.x)
-    return done, total
+    local scanTotal = math.max(1, self.width * self.height)
+    if self.phase == "scan" then
+      return math.min(scanTotal, self.scanIndex), scanTotal
+    end
+    return scanTotal + self.detailIndex - 1, scanTotal + math.max(1, #self.selectedCoords)
+  end
+
+  function collector:nearOwnEntity(x, y)
+    return self.nearKeys[tostring(x) .. "," .. tostring(y)] == true
+  end
+
+  function collector:selectPriorities()
+    self.selectedCoords = {}
+    table.sort(self.visibleCoords, function(a, b)
+      local an, bn = self:nearOwnEntity(a.x, a.y), self:nearOwnEntity(b.x, b.y)
+      if an ~= bn then return an end
+      if a.y ~= b.y then return a.y < b.y end
+      return a.x < b.x
+    end)
+    local function addBucket(bucket)
+      for _, coord in ipairs(bucket) do
+        if #self.selectedCoords >= VISIBLE_MAP_TILE_LIMIT then
+          return false
+        end
+        table.insert(self.selectedCoords, coord)
+      end
+      return true
+    end
+    local hasRoom = addBucket(self.visibleCoords)
+    if hasRoom then hasRoom = addBucket(self.nearbyCoords) end
+    if hasRoom then addBucket(self.otherCoords) end
+    self.truncated = self.revealedTileCount > #self.selectedCoords
+    self.visibleCoords = nil
+    self.nearbyCoords = nil
+    self.otherCoords = nil
+    self.phase = "detail"
+  end
+
+  function collector:updateBounds(x, y)
+    if self.bounds == nil then
+      self.bounds = { minX = x, maxX = x, minY = y, maxY = y }
+      return
+    end
+    if x < self.bounds.minX then self.bounds.minX = x end
+    if x > self.bounds.maxX then self.bounds.maxX = x end
+    if y < self.bounds.minY then self.bounds.minY = y end
+    if y > self.bounds.maxY then self.bounds.maxY = y end
   end
 
   function collector:step(maxPlots)
-    if self.done then
-      return true
-    end
+    if self.done then return true end
     if not self.visibility or not Map or self.width == 0 then
       self.done = true
       return true
     end
 
     local processed = 0
-    while self.y < self.height and processed < maxPlots do
-      local x = self.x
-      local y = self.y
-      local revealed = safeCall(function()
-        return self.visibility:IsRevealed(x, y)
-      end, false)
-      if revealed then
-        self.revealedTileCount = self.revealedTileCount + 1
-        if self.bounds == nil then
-          self.bounds = { minX = x, maxX = x, minY = y, maxY = y }
-        else
-          if x < self.bounds.minX then self.bounds.minX = x end
-          if x > self.bounds.maxX then self.bounds.maxX = x end
-          if y < self.bounds.minY then self.bounds.minY = y end
-          if y > self.bounds.maxY then self.bounds.maxY = y end
-        end
-
-        if #self.tiles >= VISIBLE_MAP_TILE_LIMIT then
-          self.truncated = true
-        else
+    if self.phase == "scan" then
+      while self.y < self.height and processed < maxPlots do
+        local x, y = self.x, self.y
+        local revealed = safeCall(function()
+          return self.visibility:IsRevealed(x, y)
+        end, false) == true
+        if revealed then
+          self.revealedTileCount = self.revealedTileCount + 1
           local visibleNow = safeCall(function()
             return self.visibility:IsVisible(x, y)
-          end, false)
-          local plot = safeCall(function()
-            return Map.GetPlot(x, y)
-          end, nil)
-          local tile = {
-            source = "lua-api",
-            visibility = visibleNow and "visible-now" or "revealed",
-            confidence = "confirmed",
-            x = x,
-            y = y,
-            revealed = true,
-            visibleNow = visibleNow,
-            ownerPlayerId = safeCall(function()
-              return plot and plot:GetOwner()
-            end, nil)
-          }
+          end, false) == true
+          local coord = { x = x, y = y, visibleNow = visibleNow }
+          if visibleNow then
+            table.insert(self.visibleCoords, coord)
+          elseif self:nearOwnEntity(x, y) then
+            table.insert(self.nearbyCoords, coord)
+          else
+            table.insert(self.otherCoords, coord)
+          end
+        end
+
+        self.x = self.x + 1
+        if self.x >= self.width then
+          self.x = 0
+          self.y = self.y + 1
+        end
+        self.scanIndex = self.scanIndex + 1
+        processed = processed + 1
+      end
+      if self.y >= self.height then self:selectPriorities() end
+      return self.done
+    end
+
+    while self.detailIndex <= #self.selectedCoords and processed < maxPlots do
+      local coord = self.selectedCoords[self.detailIndex]
+      coord.visibleNow = safeCall(function()
+        return self.visibility:IsVisible(coord.x, coord.y)
+      end, false) == true
+      local tile = {
+        source = "lua-api",
+        visibility = coord.visibleNow and "visible-now" or "revealed",
+        confidence = "confirmed",
+        x = coord.x,
+        y = coord.y,
+        revealed = true,
+        visibleNow = coord.visibleNow
+      }
+      if coord.visibleNow then
+        local plot = safeCall(function() return Map.GetPlot(coord.x, coord.y) end, nil)
+        if plot then
+          local ownerPlayerId = safeCall(function() return plot:GetOwner() end, nil)
+          if type(ownerPlayerId) == "number" and ownerPlayerId >= 0 then
+            tile.ownerPlayerId = ownerPlayerId
+          end
           local terrainType = plotTerrainType(plot)
-          if terrainType ~= nil then
-            tile.terrainType = terrainType
-          end
+          if terrainType ~= nil then tile.terrainType = terrainType end
           local featureType = plotFeatureType(plot)
-          if featureType ~= nil then
-            tile.featureType = featureType
-          end
-          local visibleResourceType = visiblePlotResourceType(plot, localPlayerId)
+          if featureType ~= nil then tile.featureType = featureType end
+
+          local visibleResourceType = visiblePlotResourceType(plot, self.playerResources)
           if visibleResourceType ~= nil then
             tile.resourceType = visibleResourceType
+            local resourceAmount = plotOptionalNumber(plot, "GetResourceCount")
+            if resourceAmount ~= nil and resourceAmount > 0 then
+              tile.resourceAmount = resourceAmount
+            end
           end
           enrichTilePlanningFields(tile, plot)
-          if visibleNow and plot then
-            local unitIds, tileVisibleForeignUnits = collectUnitsInVisiblePlot(plot, localPlayerId, self.seenVisibleForeignUnitIds)
-            if #unitIds > 0 then
-              tile.unitIds = unitIds
-            end
-            appendMissingUnits(self.visibleForeignUnits, tileVisibleForeignUnits)
-          end
-          table.insert(self.tiles, tile)
+
+          local unitIds, tileForeignUnits, unverified = collectUnitsInVisiblePlot(
+            plot, self.localPlayerId, self.seenVisibleForeignUnitIds, self.visibility
+          )
+          self.foreignUnitVisibilityUnverified = self.foreignUnitVisibilityUnverified or unverified
+          if #unitIds > 0 then tile.unitIds = unitIds end
+          appendMissingUnits(self.visibleForeignUnits, tileForeignUnits)
         end
       end
-
-      self.x = self.x + 1
-      if self.x >= self.width then
-        self.x = 0
-        self.y = self.y + 1
-      end
+      self:updateBounds(coord.x, coord.y)
+      table.insert(self.tiles, tile)
+      self.detailIndex = self.detailIndex + 1
       processed = processed + 1
     end
 
-    if self.y >= self.height then
-      self.done = true
-    end
+    if self.detailIndex > #self.selectedCoords then self.done = true end
     return self.done
   end
 
@@ -1435,6 +1586,8 @@ local function collectProgression(kind, localPlayerId)
       typeField = "TechnologyType",
       unknown = "UNKNOWN_TECH",
       current = "GetResearchingTech",
+      progress = "GetResearchProgress",
+      cost = "GetResearchCost",
       completed = "HasTech",
       available = "CanResearch",
       boosted = "HasBoostBeenTriggered"
@@ -1446,6 +1599,8 @@ local function collectProgression(kind, localPlayerId)
       typeField = "CivicType",
       unknown = "UNKNOWN_CIVIC",
       current = "GetProgressingCivic",
+      progress = "GetCulturalProgress",
+      cost = "GetCultureCost",
       completed = "HasCivic",
       available = "CanProgress",
       boosted = "HasBoostBeenTriggered"
@@ -1496,7 +1651,7 @@ local function collectProgression(kind, localPlayerId)
     end)
   end
 
-  return {
+  local result = {
     source = "lua-api",
     visibility = "own",
     confidence = reads > 0 and "confirmed" or "low",
@@ -1505,6 +1660,13 @@ local function collectProgression(kind, localPlayerId)
     available = available,
     boosts = boosts
   }
+  if type(currentIndex) == "number" and currentIndex >= 0 then
+    local currentProgress = componentCall(component, config.progress, currentIndex)
+    local currentCost = componentCall(component, config.cost, currentIndex)
+    if type(currentProgress) == "number" then result.currentProgress = currentProgress end
+    if type(currentCost) == "number" then result.currentCost = currentCost end
+  end
+  return result
 end
 
 local function incrementPolicySlot(policySlots, slotType)
@@ -1540,6 +1702,8 @@ local function collectGovernment(localPlayerId)
   local currentGovernment = namedType("UNKNOWN_GOVERNMENT")
   local policySlots = jsonObject({})
   local policies = jsonArray({})
+  local availablePolicies = jsonArray({})
+  local availablePolicyReads, availablePoliciesKnown = 0, culture ~= nil
   local seenPolicies = {}
   local reads = 0
 
@@ -1572,18 +1736,47 @@ local function collectGovernment(localPlayerId)
     end)
   end
 
-  local canChangePolicies = componentCall(culture, "CanChangeGovernment")
-  if type(canChangePolicies) ~= "boolean" then
-    canChangePolicies = false
+  if culture ~= nil then
+    forEachGameInfoRow("Policies", "PolicyType", function(row)
+      if row and type(row.Hash) == "number" and row.PolicyType ~= nil then
+        local unlocked = componentCall(culture, "IsPolicyUnlocked", row.Hash)
+        local obsolete = componentCall(culture, "IsPolicyObsolete", row.Hash)
+        if type(unlocked) == "boolean" and type(obsolete) == "boolean" then
+          availablePolicyReads = availablePolicyReads + 1
+          reads = reads + 2
+          if unlocked and not obsolete then
+            table.insert(availablePolicies, {
+              type = row.PolicyType,
+              name = lookupText(row.Name or row.PolicyType),
+              slotType = row.GovernmentSlotType,
+              description = lookupText(row.Description or "")
+            })
+          end
+        else
+          availablePoliciesKnown = false
+        end
+      else
+        availablePoliciesKnown = false
+      end
+    end)
+  end
+
+  -- Policy switching also depends on turn permissions and paid changes. Unknown
+  -- until that UI decision can be reproduced completely; do not report false.
+  local canChangePolicies = nil
+  if not availablePoliciesKnown or availablePolicyReads == 0 then
+    availablePolicies = nil
+    emitDiagnostic("available-policies-unavailable")
   end
 
   return {
     source = "lua-api",
     visibility = "own",
-    confidence = reads > 0 and "confirmed" or "low",
+    confidence = reads > 0 and availablePolicies ~= nil and "confirmed" or "low",
     currentGovernment = currentGovernment,
     policySlots = policySlots,
     policies = policies,
+    availablePolicies = availablePolicies,
     canChangePolicies = canChangePolicies
   }
 end
@@ -1761,6 +1954,41 @@ local function collectDiplomacy(localPlayerId)
   }
 end
 
+local function collectEconomy(localPlayerId)
+  local player = Players and Players[localPlayerId]
+  local technology = player and componentCall(player, "GetTechs") or nil
+  local culture = player and componentCall(player, "GetCulture") or nil
+  local religion = player and componentCall(player, "GetReligion") or nil
+  local treasury = player and componentCall(player, "GetTreasury") or nil
+  local economy = {
+    source = "lua-api",
+    visibility = "own",
+    confidence = "low"
+  }
+  local reads = 0
+  local values = {
+    { "sciencePerTurn", technology, "GetScienceYield" },
+    { "culturePerTurn", culture, "GetCultureYield" },
+    { "faithPerTurn", religion, "GetFaithYield" },
+    { "faithBalance", religion, "GetFaithBalance" },
+    { "goldIncomePerTurn", treasury, "GetGoldYield" },
+    { "goldMaintenancePerTurn", treasury, "GetTotalMaintenance" },
+    { "goldBalance", treasury, "GetGoldBalance" }
+  }
+  for _, spec in ipairs(values) do
+    local value = componentCall(spec[2], spec[3])
+    if type(value) == "number" then
+      economy[spec[1]] = value
+      reads = reads + 1
+    end
+  end
+  if type(economy.goldIncomePerTurn) == "number" and type(economy.goldMaintenancePerTurn) == "number" then
+    economy.goldPerTurn = economy.goldIncomePerTurn - economy.goldMaintenancePerTurn
+  end
+  economy.confidence = reads == #values and "confirmed" or "low"
+  return economy
+end
+
 local function hasModule(modules, moduleName)
   for _, value in ipairs(modules or {}) do
     if value == moduleName then
@@ -1771,7 +1999,7 @@ local function hasModule(modules, moduleName)
 end
 
 local function withCoreModules(extraModules)
-  local modules = jsonArray({ "meta", "localPlayer" })
+  local modules = jsonArray({ "meta", "localPlayer", "selection" })
   for _, moduleName in ipairs(extraModules or {}) do
     if not hasModule(modules, moduleName) then
       table.insert(modules, moduleName)
@@ -1835,12 +2063,48 @@ local function collectEmptyDiplomacy()
   }
 end
 
+local function emptyDecisionDomain(moduleName)
+  return {
+    availability = "unavailable",
+    source = "inferred",
+    visibility = "player-visible",
+    confidence = "low"
+  }
+end
+
+local function collectDecisionDomain(moduleName, localPlayerId)
+  local collectorNames = {
+    governors = "collectGovernors",
+    trade = "collectTrade",
+    cityStates = "collectCityStates"
+  }
+  local collector = decisionData and decisionData[collectorNames[moduleName]]
+  if type(collector) ~= "function" then
+    emitDiagnostic("decision-data-collector-unavailable", { module = moduleName })
+    return emptyDecisionDomain(moduleName)
+  end
+  local context = {
+    safeCall = safeCall,
+    jsonArray = jsonArray,
+    jsonObject = jsonObject,
+    lookupText = lookupText,
+    player = Players and Players[localPlayerId] or nil
+  }
+  local ok, payload = pcall(collector, localPlayerId, context)
+  if not ok or type(payload) ~= "table" then
+    return emptyDecisionDomain(moduleName)
+  end
+  return payload
+end
+
 local function collectSnapshot(exportType, modules, options)
   options = options or {}
+  modules = withCoreModules(modules)
   local localPlayerId = getLocalPlayerId()
   local gameTurn = safeCall(function()
     return Game.GetCurrentGameTurn()
   end, 0)
+  exportSequence = exportSequence + 1
   local includeCities = hasModule(modules, "cities")
   local includeUnits = hasModule(modules, "units")
   local includeVisibleMap = hasModule(modules, "visibleMap")
@@ -1849,6 +2113,9 @@ local function collectSnapshot(exportType, modules, options)
   local includeGovernment = hasModule(modules, "government") or hasModule(modules, "policies")
   local includeResources = hasModule(modules, "resources")
   local includeDiplomacy = hasModule(modules, "diplomacyPublic")
+  local includeGovernors = hasModule(modules, "governors")
+  local includeTrade = hasModule(modules, "trade")
+  local includeCityStates = hasModule(modules, "cityStates")
   local units = includeUnits and collectUnits(localPlayerId) or jsonArray({})
   local visibleMap = collectEmptyVisibleMap()
   local visibleForeignUnits = jsonArray({})
@@ -1871,13 +2138,15 @@ local function collectSnapshot(exportType, modules, options)
       modId = MOD_ID,
       modVersion = MOD_VERSION,
       compatVersion = COMPAT_VERSION,
+      protocolVersion = PROTOCOL_VERSION,
       transport = "lua-log",
       visibilityMode = "player-visible",
-      exportId = "civ6ai-" .. tostring(gameTurn) .. "-" .. tostring(localPlayerId) .. "-" .. tostring(os.time()),
+      exportId = SESSION_ID .. "-" .. tostring(localPlayerId) .. "-" .. tostring(exportSequence),
       exportType = exportType
     },
     session = {
-      sessionId = "turn-" .. tostring(gameTurn) .. "-player-" .. tostring(localPlayerId),
+      sessionId = SESSION_ID,
+      idScope = "load",
       gameTurn = gameTurn,
       ruleset = safeCall(function()
         return tostring(GameConfiguration.GetValue("RULESET") or "UNKNOWN_RULESET")
@@ -1894,6 +2163,7 @@ local function collectSnapshot(exportType, modules, options)
     },
     localPlayer = collectLocalPlayer(localPlayerId),
     modules = modules,
+    selection = collectSelection(localPlayerId),
     cities = includeCities and collectCities(localPlayerId) or jsonArray({}),
     units = units,
     visibleMap = visibleMap,
@@ -1902,6 +2172,10 @@ local function collectSnapshot(exportType, modules, options)
     government = includeGovernment and collectGovernment(localPlayerId) or collectEmptyGovernment(),
     resources = includeResources and collectResources(localPlayerId) or collectEmptyResources(),
     diplomacy = includeDiplomacy and collectDiplomacy(localPlayerId) or collectEmptyDiplomacy(),
+    governors = includeGovernors and collectDecisionDomain("governors", localPlayerId) or emptyDecisionDomain("governors"),
+    trade = includeTrade and collectDecisionDomain("trade", localPlayerId) or emptyDecisionDomain("trade"),
+    cityStates = includeCityStates and collectDecisionDomain("cityStates", localPlayerId) or emptyDecisionDomain("cityStates"),
+    economy = hasModule(modules, "economy") and collectEconomy(localPlayerId) or nil,
     attention = {
       {
         kind = "mvp-diagnostic",
@@ -1918,36 +2192,55 @@ local function collectSnapshot(exportType, modules, options)
   }
 end
 
-local function syncTriggerLabel(triggerKind)
-  if triggerKind == "manual-turn" then
-    return "回合情报"
+local MODULE_PAYLOADS = {
+  localPlayer = "localPlayer", cities = "cities", units = "units", visibleMap = "visibleMap",
+  selection = "selection", governors = "governors", trade = "trade", cityStates = "cityStates",
+  techs = "techs", civics = "civics", government = "government", policies = "government",
+  resources = "resources", diplomacyPublic = "diplomacy", economy = "economy"
+}
+
+local function mergeCapturedModules(snapshot, unitsScope)
+  local playerId, turn = snapshot.localPlayer.localPlayerId, snapshot.session.gameTurn
+  if captureCache.playerId ~= playerId or (captureCache.gameTurn and turn < captureCache.gameTurn) then
+    captureCache.payloads = {}
+    captureCache.moduleStatus = {}
+  elseif captureCache.gameTurn ~= turn then
+    captureCache.payloads = {}
   end
-  if triggerKind == "manual-visible-map" then
-    return "地图情报"
+  captureCache.playerId, captureCache.gameTurn = playerId, turn
+  local capturedAt = nowUtc()
+  for _, moduleName in ipairs(snapshot.modules) do
+    local status = { capturedTurn = turn, capturedAt = snapshot.exportedAt, exportId = snapshot.source.exportId }
+    if moduleName == "visibleMap" then status.capturedAt = capturedAt end
+    if moduleName == "units" then status.scope = unitsScope or "own-only" end
+    captureCache.moduleStatus[moduleName] = status
+    local field = MODULE_PAYLOADS[moduleName]
+    if field then captureCache.payloads[field] = snapshot[field] end
   end
-  if triggerKind == "manual-modules" then
-    return "专题情报"
+  snapshot.modules = jsonArray({})
+  snapshot.moduleStatus = jsonObject({})
+  for moduleName, status in pairs(captureCache.moduleStatus) do
+    snapshot.moduleStatus[moduleName] = status
+    if status.capturedTurn == turn then
+      table.insert(snapshot.modules, moduleName)
+      local field = MODULE_PAYLOADS[moduleName]
+      if field then snapshot[field] = captureCache.payloads[field] end
+    end
   end
-  if triggerKind == "manual-full" then
-    return "完整战情"
-  end
-  if triggerKind == "auto-turn" then
-    return "自动汇总"
-  end
-  return "战情简报"
+  table.sort(snapshot.modules)
+  snapshot.exportedAt = capturedAt
+  return snapshot
 end
 
-local function createSnapshotEmitter(snapshot, triggerKind, json, checksumSha256)
-  if not base64SelfTestOk() or not sha256SelfTestOk() then
+local function createSnapshotEmitter(snapshot, triggerKind, json)
+  if not base64SelfTestOk() then
     emitDiagnostic("export-blocked-self-test-failed")
-    setStatus("简报汇总失败。")
-    setLastExportStatus("最近汇总失败。")
+    setStatus(lookupText("LOC_CIV6_AI_COPILOT_STATUS_FAILED"))
     return { failed = true }
   end
 
   triggerKind = triggerKind or "manual"
   json = json or (jsonEncode(snapshot) .. "\n")
-  checksumSha256 = checksumSha256 or sha256(json)
   local exportId = snapshot.source.exportId
   local chunkCount = math.ceil(#json / RAW_BYTES_PER_CHUNK)
   local begin = {
@@ -1956,7 +2249,6 @@ local function createSnapshotEmitter(snapshot, triggerKind, json, checksumSha256
     schemaVersion = snapshot.schemaVersion,
     chunkCount = chunkCount,
     byteLength = #json,
-    checksumSha256 = checksumSha256,
     encoding = "base64-json",
     createdAt = nowUtc()
   }
@@ -1971,7 +2263,6 @@ local function createSnapshotEmitter(snapshot, triggerKind, json, checksumSha256
     trigger = triggerKind,
     chunkCount = chunkCount,
     byteLength = #json,
-    checksumSha256 = begin.checksumSha256,
     emittedAt = nowUtc()
   }
   local diagnosticJson = jsonEncode(exportDiagnostic)
@@ -2002,16 +2293,12 @@ local function finishSnapshotEmission(emitter)
     trigger = triggerKind,
     chunkCount = emitter.chunkCount,
     byteLength = emitter.begin.byteLength,
-    checksumSha256 = emitter.begin.checksumSha256
   })
   local gameTurn = snapshot and snapshot.session and snapshot.session.gameTurn or nil
-  local turnText = type(gameTurn) == "number" and (" · 第 " .. tostring(gameTurn) .. " 回合") or ""
-  setLastExportStatus(
-    "最近汇总：" .. syncTriggerLabel(triggerKind) .. turnText
-  )
-  setStatus(
-    "简报已汇总，可继续由AI副官分析。"
-  )
+  if type(gameTurn) == "number" then
+    setLastExportStatus(lookupText("LOC_CIV6_AI_COPILOT_LAST_EXPORT_TURN", gameTurn))
+  end
+  setStatus(lookupText("LOC_CIV6_AI_COPILOT_STATUS_UPDATED"))
   return true
 end
 
@@ -2043,11 +2330,7 @@ local function stepSnapshotEmitter(emitter, maxChunks)
     emitted = emitted + 1
   end
 
-  setSyncProgress(
-    "正在写入简报 " .. tostring(emitter.chunkIndex) .. "/" .. tostring(emitter.chunkCount),
-    emitter.chunkIndex,
-    emitter.chunkCount
-  )
+  setSyncProgress(lookupText("LOC_CIV6_AI_COPILOT_STATUS_UPDATING"))
 
   if emitter.chunkIndex >= emitter.chunkCount then
     emitter.done = true
@@ -2057,11 +2340,10 @@ local function stepSnapshotEmitter(emitter, maxChunks)
 end
 
 local function emitSnapshot(snapshot, triggerKind)
-  setSyncProgress("正在编码简报…", 0, 1)
+  mergeCapturedModules(snapshot, "own-only")
+  setSyncProgress(lookupText("LOC_CIV6_AI_COPILOT_STATUS_UPDATING"))
   local json = jsonEncode(snapshot) .. "\n"
-  setSyncProgress("正在校验简报…", 0, 1)
-  local checksumSha256 = sha256(json)
-  local emitter = createSnapshotEmitter(snapshot, triggerKind, json, checksumSha256)
+  local emitter = createSnapshotEmitter(snapshot, triggerKind, json)
   if emitter.failed then
     clearSyncProgress()
     return false
@@ -2073,22 +2355,6 @@ local function emitSnapshot(snapshot, triggerKind)
       return exported
     end
   end
-end
-
-local function syncJobLabel(triggerKind)
-  if triggerKind == "manual-visible-map" then
-    return "地图情报"
-  end
-  if triggerKind == "manual-modules" then
-    return "专题情报"
-  end
-  if triggerKind == "manual-full" then
-    return "完整战情"
-  end
-  if triggerKind == "auto-turn" then
-    return "自动汇总"
-  end
-  return "回合情报"
 end
 
 local function stopCopilotUpdateIfIdle()
@@ -2125,9 +2391,15 @@ local function stepActiveSyncJob()
     return
   end
 
+  if getLocalPlayerId() ~= job.localPlayerId or Game.GetCurrentGameTurn() ~= job.gameTurn then
+    emitDiagnostic("export-aborted-context-changed")
+    setStatus(lookupText("LOC_CIV6_AI_COPILOT_STATUS_CONTEXT_CHANGED"))
+    finishActiveSyncJob(false)
+    return
+  end
+
   if job.phase == "prepare" then
-    setStatus("正在准备" .. syncJobLabel(job.triggerKind) .. "…")
-    setSyncProgress("正在准备…", 0, 1)
+    setSyncProgress(lookupText("LOC_CIV6_AI_COPILOT_STATUS_UPDATING"))
     job.snapshot = collectSnapshot(job.exportType, job.modules, { deferVisibleMap = job.includeVisibleMap })
     if job.includeVisibleMap then
       job.mapCollector = createVisibleMapCollector(job.localPlayerId)
@@ -2140,10 +2412,10 @@ local function stepActiveSyncJob()
 
   if job.phase == "map" then
     local done = job.mapCollector:step(VISIBLE_MAP_PLOTS_PER_FRAME)
-    local donePlots, totalPlots = job.mapCollector:progress()
-    setSyncProgress("正在扫描地图 " .. tostring(donePlots) .. "/" .. tostring(totalPlots), donePlots, totalPlots)
+    setSyncProgress(lookupText("LOC_CIV6_AI_COPILOT_STATUS_UPDATING_MAP"))
     if done then
-      local visibleMap, visibleForeignUnits = job.mapCollector:result()
+      local visibleMap, visibleForeignUnits, unverified = job.mapCollector:result()
+      job.unitsScope = unverified and "own-only" or "own-and-visible"
       job.snapshot.visibleMap = visibleMap
       if hasModule(job.modules, "units") then
         appendMissingUnits(job.snapshot.units, visibleForeignUnits)
@@ -2154,31 +2426,16 @@ local function stepActiveSyncJob()
   end
 
   if job.phase == "encode" then
-    setStatus("正在编码" .. syncJobLabel(job.triggerKind) .. "…")
-    setSyncProgress("正在编码简报…", 0, 1)
+    setSyncProgress(lookupText("LOC_CIV6_AI_COPILOT_STATUS_UPDATING"))
+    mergeCapturedModules(job.snapshot, job.unitsScope)
     job.json = jsonEncode(job.snapshot) .. "\n"
-    job.hasher = createSha256Hasher(job.json)
-    job.phase = "hash"
-    return
-  end
-
-  if job.phase == "hash" then
-    local done, digest = stepSha256Hasher(job.hasher, SNAPSHOT_HASH_BLOCKS_PER_FRAME)
-    setSyncProgress(
-      "正在校验简报 " .. tostring(job.hasher.blockIndex) .. "/" .. tostring(job.hasher.totalBlocks),
-      job.hasher.blockIndex,
-      job.hasher.totalBlocks
-    )
-    if done then
-      job.checksumSha256 = digest
-      job.phase = "emit"
-    end
+    job.phase = "emit"
     return
   end
 
   if job.phase == "emit" then
     if job.emitter == nil then
-      job.emitter = createSnapshotEmitter(job.snapshot, job.triggerKind, job.json, job.checksumSha256)
+      job.emitter = createSnapshotEmitter(job.snapshot, job.triggerKind, job.json)
       if job.emitter.failed then
         finishActiveSyncJob(false)
         return
@@ -2192,24 +2449,29 @@ local function stepActiveSyncJob()
 end
 
 local function startSyncJob(exportType, modules, triggerKind, onComplete)
+  autoSyncStatus = nil
   if activeSyncJob ~= nil then
-    setStatus("已有简报正在汇总，请稍候。")
-    setSyncProgress("已有汇总任务正在进行…", 0, 1)
+    setStatus(lookupText("LOC_CIV6_AI_COPILOT_STATUS_BUSY"))
     return false
   end
 
   local localPlayerId = getLocalPlayerId()
+  if localPlayerId < 0 or not (Players and Players[localPlayerId]) then
+    emitDiagnostic("export-blocked-no-local-player")
+    setStatus(lookupText("LOC_CIV6_AI_COPILOT_STATUS_NO_LOCAL_PLAYER"))
+    return false
+  end
   activeSyncJob = {
     exportType = exportType,
     modules = modules,
     triggerKind = triggerKind,
     onComplete = onComplete,
     localPlayerId = localPlayerId,
+    gameTurn = Game.GetCurrentGameTurn(),
     includeVisibleMap = hasModule(modules, "visibleMap"),
     phase = "prepare"
   }
-  setStatus("正在排队" .. syncJobLabel(triggerKind) .. "…")
-  setSyncProgress("正在排队…", 0, 1)
+  setSyncProgress(lookupText("LOC_CIV6_AI_COPILOT_STATUS_UPDATING"))
   if not startCopilotUpdate() then
     repeat
       stepActiveSyncJob()
@@ -2247,7 +2509,7 @@ local function syncGovernment()
 end
 
 local function syncResources()
-  syncModules({ "resources" })
+  syncModules({ "resources", "economy" })
 end
 
 local function syncDiplomacy()
@@ -2281,7 +2543,9 @@ local function resetAutoSyncDedupe()
   lastAutoSyncKey = nil
   lastAutoSyncAt = 0
   pendingAutoSync = nil
-  setAutoSyncStatus(autoSyncEnabled and "回合开始后自动汇总" or lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF"))
+  if autoSyncEnabled then
+    setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_ON"))
+  end
 end
 
 local function completePendingAutoSync()
@@ -2291,16 +2555,24 @@ local function completePendingAutoSync()
     return false
   end
   if not autoSyncEnabled then
-    setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF"))
+    return false
+  end
+  if getLocalPlayerId() ~= pending.localPlayerId or Game.GetCurrentGameTurn() ~= pending.gameTurn or not isLocalPlayerTurn() then
+    emitDiagnostic("auto-sync-cancelled-context-changed", {
+      autoSyncKey = pending.key,
+      localPlayerId = pending.localPlayerId,
+      gameTurn = pending.gameTurn
+    })
+    setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_WAITING"))
     return false
   end
   if lastAutoSyncKey == pending.key then
-    setAutoSyncStatus("本回合简报已汇总")
+    setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_UPDATED"))
     return false
   end
 
-  setAutoSyncStatus("正在自动汇总…")
-  return startSyncJob("turn", withCoreModules(TURN_BRIEF_MODULES), "auto-turn", function(exported)
+  setSyncProgress(lookupText("LOC_CIV6_AI_COPILOT_STATUS_UPDATING"))
+  return startSyncJob("full", withCoreModules(FULL_BRIEF_MODULES), "auto-turn", function(exported)
     if exported then
       lastAutoSyncKey = pending.key
       lastAutoSyncAt = os.time()
@@ -2308,9 +2580,9 @@ local function completePendingAutoSync()
         autoSyncKey = pending.key,
         localPlayerId = pending.localPlayerId,
         gameTurn = pending.gameTurn,
-        mode = "deferred-progress"
+        mode = "full"
       })
-      setAutoSyncStatus("已自动汇总第 " .. tostring(pending.gameTurn) .. " 回合简报")
+      setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_STATUS_UPDATED"))
     end
   end)
 end
@@ -2326,6 +2598,9 @@ onCopilotUpdate = function()
       return
     end
     completePendingAutoSync()
+    if activeSyncJob == nil and pendingAutoSync == nil then
+      stopCopilotUpdateIfIdle()
+    end
     return
   end
 
@@ -2334,19 +2609,31 @@ end
 
 local function tryAutoSyncTurn()
   if not autoSyncEnabled then
-    setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF"))
     return false
   end
 
   if not isLocalPlayerTurn() then
     emitDiagnostic("auto-sync-skipped", { skipReason = "not-local-player-turn" })
-    setAutoSyncStatus("等待本地玩家回合")
+    setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_WAITING"))
     return false
   end
 
   local key, localPlayerId, gameTurn = autoSyncTurnKey()
+  if activeSyncJob ~= nil
+    and activeSyncJob.triggerKind == "auto-turn"
+    and activeSyncJob.localPlayerId == localPlayerId
+    and activeSyncJob.gameTurn == gameTurn then
+    emitDiagnostic("auto-sync-skipped", {
+      skipReason = "already-running",
+      autoSyncKey = key,
+      localPlayerId = localPlayerId,
+      gameTurn = gameTurn
+    })
+    setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_PENDING"))
+    return false
+  end
   if pendingAutoSync ~= nil and pendingAutoSync.key == key then
-    setAutoSyncStatus("本回合简报已排队")
+    setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_PENDING"))
     return false
   end
   if lastAutoSyncKey == key then
@@ -2356,7 +2643,7 @@ local function tryAutoSyncTurn()
       localPlayerId = localPlayerId,
       gameTurn = gameTurn
     })
-    setAutoSyncStatus("本回合简报已汇总")
+    setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_UPDATED"))
     return false
   end
 
@@ -2368,7 +2655,7 @@ local function tryAutoSyncTurn()
       localPlayerId = localPlayerId,
       gameTurn = gameTurn
     })
-    setAutoSyncStatus("汇总间隔过短")
+    setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_THROTTLED"))
     return false
   end
 
@@ -2383,9 +2670,9 @@ local function tryAutoSyncTurn()
     localPlayerId = localPlayerId,
     gameTurn = gameTurn,
     delaySeconds = AUTO_SYNC_DELAY_SECONDS,
-    mode = "deferred-progress"
+    mode = "full"
   })
-  setAutoSyncStatus("本回合简报已排队")
+  setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_PENDING"))
   if not startCopilotUpdate() then
     return completePendingAutoSync()
   end
@@ -2397,14 +2684,11 @@ local function toggleAutoSync()
   refreshAutoSyncButton()
   if autoSyncEnabled then
     resetAutoSyncDedupe()
-    setStatus("本地玩家回合开始后自动汇总简报。")
-    setAutoSyncStatus("回合开始后自动汇总")
     emitDiagnostic("auto-sync-enabled")
   else
     pendingAutoSync = nil
     stopCopilotUpdateIfIdle()
     setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF"))
-    setStatus(lookupText("LOC_CIV6_AI_COPILOT_STATUS_READY"))
     emitDiagnostic("auto-sync-disabled")
   end
 end
@@ -2528,11 +2812,11 @@ local function copilotRegistry()
 end
 
 local function destroyLaunchInstance(buttonStack, instance)
-  if buttonStack == nil or instance == nil or buttonStack.DestroyChild == nil then
-    return false
-  end
+  if instance == nil then return false end
   return safeCall(function()
-    buttonStack:DestroyChild(instance)
+    local control = instance.CopilotButton or instance.CopilotPin
+    if control == nil or control.SetHide == nil then return false end
+    control:SetHide(true)
     return true
   end, false) == true
 end
@@ -2641,33 +2925,7 @@ local function registerPanelCallbacks()
     return
   end
   Controls.AutoSyncButton:RegisterCallback(Mouse.eLClick, toggleAutoSync)
-  Controls.SyncTurnButton:RegisterCallback(Mouse.eLClick, function()
-    syncTurn("manual-turn")
-  end)
-  Controls.SyncMapButton:RegisterCallback(Mouse.eLClick, function()
-    syncVisibleMap()
-  end)
-  Controls.SyncCitiesButton:RegisterCallback(Mouse.eLClick, function()
-    syncCities()
-  end)
-  Controls.SyncUnitsButton:RegisterCallback(Mouse.eLClick, function()
-    syncUnits()
-  end)
-  Controls.SyncTechCivicsButton:RegisterCallback(Mouse.eLClick, function()
-    syncTechCivics()
-  end)
-  Controls.SyncGovernmentButton:RegisterCallback(Mouse.eLClick, function()
-    syncGovernment()
-  end)
-  Controls.SyncResourcesButton:RegisterCallback(Mouse.eLClick, function()
-    syncResources()
-  end)
-  Controls.SyncDiplomacyButton:RegisterCallback(Mouse.eLClick, function()
-    syncDiplomacy()
-  end)
-  Controls.ForceFullButton:RegisterCallback(Mouse.eLClick, function()
-    forceFull()
-  end)
+  Controls.UpdateBriefButton:RegisterCallback(Mouse.eLClick, forceFull)
   Controls.IconPreviewButton:RegisterCallback(Mouse.eLClick, function()
     showIconPreviewPanel()
   end)
@@ -2696,6 +2954,9 @@ end
 local function initialize()
   print("CIV6_AI_COPILOT_LOADED version=" .. MOD_VERSION)
   emitDiagnostic("loaded")
+  if decisionDataLoadError ~= nil then
+    emitDiagnostic("decision-data-module-unavailable", { stage = decisionDataLoadError })
+  end
   if ContextPtr and ContextPtr.SetHide then
     ContextPtr:SetHide(false)
   end
@@ -2710,12 +2971,8 @@ local function initialize()
     Events.LoadGameViewStateDone.Add(attachLaunchButton)
   end
   refreshAutoSyncButton()
-  setAutoSyncStatus(lookupText("LOC_CIV6_AI_COPILOT_AUTO_SYNC_STATUS_OFF"))
   setLastExportStatus(lookupText("LOC_CIV6_AI_COPILOT_LAST_EXPORT_NONE"))
-  if Controls and Controls.BridgeHintLabel then
-    Controls.BridgeHintLabel:SetText(lookupText("LOC_CIV6_AI_COPILOT_BRIDGE_HINT_AFTER_SYNC"))
-  end
-  setStatus(Locale.Lookup("LOC_CIV6_AI_COPILOT_STATUS_READY"))
+  setStatus(lookupText("LOC_CIV6_AI_COPILOT_STATUS_READY"))
 end
 
 initialize()

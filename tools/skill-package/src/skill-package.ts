@@ -178,7 +178,7 @@ export function defaultCodexSkillsDir(
 async function validateSkillMarkdown(sourceDir: string, issues: string[]): Promise<void> {
   let skill = "";
   try {
-    skill = await readFile(path.join(sourceDir, SKILL_ENTRY_FILE), "utf8");
+    skill = (await readFile(path.join(sourceDir, SKILL_ENTRY_FILE), "utf8")).replace(/\r\n/g, "\n");
   } catch {
     return;
   }
@@ -321,7 +321,7 @@ async function writeSkillPackageChecklist(packageDir: string): Promise<void> {
     "## Expected behavior",
     "",
     "- The skill must prefer Mod snapshot, handoff, preflight, summarize, suggest-sync, and doctor outputs over blind analysis.",
-    "- If war/map/policy/city data is missing, it should ask the player to open the Civ6 AI briefing panel and sync exact modules.",
+    "- If war/map/policy/city data is missing, it should ask the player to open the Civ6 AI briefing panel and click `更新战情` (`Update Briefing`).",
     "- It must keep multiplayer advice limited to local-player visible information.",
     "- It must treat doctor failures, manifest mismatches, or reason=\"exported\" mismatches as sync blockers.",
     "- If the user asks to install or update the skill, it should download the latest GitHub Release or repository skill folder, replace the old skill folder, and report version plus compatVersion.",

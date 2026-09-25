@@ -15,6 +15,7 @@ test("copilot prepare builds a ready handoff from the standard snapshot director
   try {
     const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
     snapshot.exportedAt = new Date().toISOString();
+  for (const capture of Object.values(snapshot.moduleStatus ?? {}) as Array<{ capturedAt: string }>) capture.capturedAt = snapshot.exportedAt as string;
     await writeLatestWithManifest(snapshotDir, snapshot, "prepare-export-0001");
 
     const report = await runCopilotPrepare({
@@ -47,6 +48,7 @@ test("copilot prepare refreshes from Lua.log on Windows-style auto mode", async 
   try {
     const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
     snapshot.exportedAt = new Date().toISOString();
+  for (const capture of Object.values(snapshot.moduleStatus ?? {}) as Array<{ capturedAt: string }>) capture.capturedAt = snapshot.exportedAt as string;
     const logContent = `${buildSnapshotLogLines(snapshot, { exportId: "prepare-export-0002", chunkSize: 128 }).join("\n")}\n`;
     await writeFile(luaLogPath, logContent, "utf8");
 
@@ -85,6 +87,7 @@ async function writeLatestWithManifest(outputDir: string, snapshot: Record<strin
     `${JSON.stringify(
       {
         exportId,
+        checksumScope: "latest-json-file",
         checksumSha256: createHash("sha256").update(Buffer.from(jsonText, "utf8")).digest("hex"),
         latestPath,
         snapshotPath: latestPath,

@@ -47,10 +47,11 @@ export async function renderSnapshotMapObject(snapshot: SnapshotLike, options: R
     throw new RenderMapError("snapshot failed schema or multiplayer fairness validation", validation);
   }
 
-  const tiles = Array.isArray(snapshot.visibleMap?.tiles) ? snapshot.visibleMap.tiles : [];
-  const cities = Array.isArray(snapshot.cities) ? snapshot.cities : [];
-  const units = Array.isArray(snapshot.units) ? snapshot.units : [];
-  const bounds = getBounds(snapshot.visibleMap?.bounds, tiles);
+  const usable = (name: string) => snapshot.modules?.includes(name) && snapshot.moduleStatus?.[name]?.capturedTurn === snapshot.session?.gameTurn;
+  const tiles = usable("visibleMap") && Array.isArray(snapshot.visibleMap?.tiles) ? snapshot.visibleMap.tiles : [];
+  const cities = usable("cities") && Array.isArray(snapshot.cities) ? snapshot.cities : [];
+  const units = usable("units") && Array.isArray(snapshot.units) ? snapshot.units : [];
+  const bounds = getBounds(usable("visibleMap") ? snapshot.visibleMap?.bounds : undefined, tiles);
   const tileSize = options.tileSize ?? 34;
   const layout = createHexLayout(bounds, tileSize);
   const padding = 24;
@@ -472,6 +473,8 @@ function indent(value: string, spaces: number): string {
 }
 
 interface SnapshotLike {
+  modules?: string[];
+  moduleStatus?: Record<string, { capturedTurn: number }>;
   source?: {
     visibilityMode?: string;
   };

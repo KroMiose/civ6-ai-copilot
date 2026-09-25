@@ -85,7 +85,7 @@ test("skill installer copies the Mod-guided skill into a Codex skills directory"
 test("default Codex skills directory honors CODEX_HOME without hardcoding machine-specific paths", () => {
   assert.equal(
     defaultCodexSkillsDir({ CODEX_HOME: "/tmp/codex-home" }, "/Users/player"),
-    "/tmp/codex-home/skills"
+    path.join("/tmp/codex-home", "skills")
   );
   assert.equal(
     defaultCodexSkillsDir({}, "/Users/player"),

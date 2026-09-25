@@ -72,7 +72,7 @@ Node 版本：
    是否进入游戏：
    左上 LaunchBar 是否出现副官入口：
    战情简报是否能打开：
-   是否看到 XML 已加载/等待 Lua 初始化诊断；若出现，Lua 初始化后是否消失：
+   是否看到加载提示；若出现，初始化后是否消失：
    面板文本是否正常本地化：
    ```
 
@@ -81,19 +81,18 @@ Node 版本：
    必测：
 
    ```text
-   汇总本回合：
-   更新地图情报：
-   城市运营：
-   科技市政：
-   完整战情简报：
+   更新战情：
    ```
+
+   可选自动更新测试：确认「每回合自动更新」初始关闭，开启后在下一次本地玩家回合更新与手动刷新相同的模块和预算限制地图；再关闭开关，确认后续回合不排队自动任务。
 
    记录：
 
    ```text
    面板状态是否更新：
    是否出现卡死、断线或 gameplay 状态变化：
-   战情简报是否显示“简报已汇总”，且最近汇总状态更新：
+   战情简报是否显示“简报已汇总”，且最近更新回合正确：
+   中文与英文下按钮是否对齐、文字不裁切，空闲/更新中/完成时是否无多余留白或面板跳动：
    玩家主面板是否未暴露 exportId、分块数或 sha256 前缀：
    ```
 
@@ -114,10 +113,10 @@ Node 版本：
    ```text
    是否看到 CIV6_AI_COPILOT_LOADED：
    hasControls / hasGame / hasPlayers / hasMap 是否 true：
-   base64SelfTest / sha256SelfTest 是否 true：
+   base64SelfTest 是否 true：
    是否出现 BEGIN/CHUNK/END：
    是否出现 reason=exported 诊断：
-   exported 诊断中的 exportId/chunkCount/checksumSha256 是否合理：
+   exported 诊断中的 exportId/chunkCount/byteLength 是否合理：
    doctor 结果：
    ```
 

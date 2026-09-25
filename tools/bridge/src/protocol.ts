@@ -14,7 +14,6 @@ export interface SnapshotBegin {
   schemaVersion: string;
   chunkCount: number;
   byteLength: number;
-  checksumSha256: string;
   encoding: SnapshotEncoding;
   createdAt?: string;
 }
@@ -39,7 +38,6 @@ export interface ParsedExport {
 
 export interface AssembledSnapshot {
   exportId: string;
-  checksumSha256: string;
   jsonText: string;
   snapshot: unknown;
 }
