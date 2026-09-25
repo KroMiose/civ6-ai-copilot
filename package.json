@@ -9,6 +9,7 @@
   },
   "bin": {
     "civ6-ai-copilot": "./tools/copilot/src/prepare-cli.ts",
+    "civ6-ai-copilot-context": "./tools/copilot/src/context-cli.ts",
     "civ6-ai-copilot-bridge": "./tools/bridge/src/cli.ts",
     "civ6-ai-copilot-doctor": "./tools/doctor/src/doctor-cli.ts",
     "civ6-ai-copilot-handoff": "./tools/copilot/src/handoff-cli.ts",
@@ -31,6 +32,7 @@
     "build": "tsc -p tsconfig.json",
     "bridge": "tsx tools/bridge/src/cli.ts",
     "copilot": "tsx tools/copilot/src/prepare-cli.ts",
+    "context": "tsx tools/copilot/src/context-cli.ts",
     "doctor": "tsx tools/doctor/src/doctor-cli.ts",
     "evidence:draft": "tsx tools/release/src/manual-evidence-draft-cli.ts",
     "evidence:finalize": "tsx tools/release/src/manual-evidence-finalize-cli.ts",
