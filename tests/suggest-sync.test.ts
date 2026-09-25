@@ -80,7 +80,7 @@ test("sync guidance checks module age and unit scope and uses a light default", 
   assert.equal(result.missingModules.includes("visibleMap"), true);
   assert.match(result.recommendation, /更新战情/);
   const turn = inferRequiredModulesForIntents(["turn-priority"]);
-  assert.equal(turn.requiredModules.includes("visibleMap"), false);
+  assert.equal(turn.requiredModules.includes("visibleMap"), true);
   assert.equal(turn.requiredModules.includes("notifications"), false);
   assert.equal(turn.requiredModules.includes("economy"), true);
 });
