@@ -1,7 +1,7 @@
 ---
 name: civ6-ai-copilot
 description: 读取 Civilization VI civ6-ai-copilot Mod 导出的本地玩家可见战情，通过单一 Runtime 上下文接口快速介入当前对局，并按用户提问语言提供发展、城市、科技、市政、政策、军事、海军、定居和多人公平建议。
-version: 0.3.1
+version: 0.3.2
 compatVersion: "0.3"
 ---
 

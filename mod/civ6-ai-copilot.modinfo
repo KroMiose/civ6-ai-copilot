@@ -5,7 +5,7 @@
     <Stability>Beta</Stability>
     <Teaser>LOC_CIV6_AI_COPILOT_MOD_TEASER</Teaser>
     <Description>LOC_CIV6_AI_COPILOT_MOD_DESCRIPTION</Description>
-    <Version>0.3.1</Version>
+    <Version>0.3.2</Version>
     <Authors>civ6-ai-copilot contributors</Authors>
     <EnabledByDefault>0</EnabledByDefault>
     <AffectsSavedGames>0</AffectsSavedGames>

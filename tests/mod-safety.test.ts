@@ -2,12 +2,17 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { COMPAT_VERSION, PROTOCOL_VERSION, SCHEMA_VERSION, VERSION } from "../tools/project/src/version.js";
 
 const modInfoPath = path.resolve("mod/civ6-ai-copilot.modinfo");
 const modXmlPath = path.resolve("mod/ui/civ6_ai_copilot.xml");
 const modLuaPath = path.resolve("mod/ui/civ6_ai_copilot.lua");
 const modTextPath = path.resolve("mod/text/civ6-ai-copilot-text.xml");
 const modThumbnailPath = path.resolve("mod/thumbnail.png");
+
+function versionPattern(name: string, version: string): RegExp {
+  return new RegExp(`local ${name} = "${version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`);
+}
 
 test("modinfo registers a passive InGame UI context and required files", async () => {
   const modInfo = await readFile(modInfoPath, "utf8");
@@ -17,10 +22,10 @@ test("modinfo registers a passive InGame UI context and required files", async (
   assert.match(modInfo, /<AddUserInterfaces[^>]*id="CIV6_AI_COPILOT_UI"/);
   assert.match(modInfo, /<UpdateText[^>]*id="CIV6_AI_COPILOT_TEXT"/);
   assert.match(modInfo, /<Context>InGame<\/Context>/);
-  assert.match(lua, /local MOD_VERSION = "0\.3\.1"/);
-  assert.match(lua, /local COMPAT_VERSION = "0\.3"/);
-  assert.match(lua, /local SCHEMA_VERSION = "0\.3\.0"/);
-  assert.match(lua, /local PROTOCOL_VERSION = "0\.3\.0"/);
+  assert.match(lua, versionPattern("MOD_VERSION", VERSION));
+  assert.match(lua, versionPattern("COMPAT_VERSION", COMPAT_VERSION));
+  assert.match(lua, versionPattern("SCHEMA_VERSION", SCHEMA_VERSION));
+  assert.match(lua, versionPattern("PROTOCOL_VERSION", PROTOCOL_VERSION));
   assert.match(modInfo, /<AddUserInterfaces[^>]*id="CIV6_AI_COPILOT_UI"[\s\S]*?<File>ui\/civ6_ai_copilot\.xml<\/File>[\s\S]*?<\/AddUserInterfaces>/);
   assert.match(modInfo, /<File>ui\/civ6_ai_copilot\.lua<\/File>/);
   assert.match(modInfo, /<File>ui\/civ6_ai_copilot\.xml<\/File>/);
