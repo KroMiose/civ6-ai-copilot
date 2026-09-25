@@ -12,6 +12,7 @@ export interface TunerBridgeOptions {
   timeoutMs?: number;
   allowInvalid?: boolean;
   diagnoseOnly?: boolean;
+  skipExportId?: string;
 }
 
 export interface TunerBridgeInfo extends TunerConnectionInfo {
@@ -19,6 +20,15 @@ export interface TunerBridgeInfo extends TunerConnectionInfo {
 }
 
 export type TunerBridgeResult =
+  | {
+      ok: true;
+      exportId: string;
+      skipped: true;
+      reason: "already-written";
+      diagnostics: LogDiagnosticReport;
+      tuner: TunerBridgeInfo;
+      exitCode: 0;
+    }
   | {
       ok: boolean;
       diagnostics: LogDiagnosticReport;
@@ -114,6 +124,17 @@ export async function runTunerBridgeOnce(options: TunerBridgeOptions): Promise<T
     }
 
     const assembled = assembleLatestCompleteExport(parseLogContent(output));
+    if (options.skipExportId && assembled.exportId === options.skipExportId) {
+      return {
+        ok: true,
+        exportId: assembled.exportId,
+        skipped: true,
+        reason: "already-written",
+        diagnostics,
+        tuner,
+        exitCode: 0
+      };
+    }
     const validation = await validateSnapshotObject(assembled.snapshot);
     if (!validation.ok && !options.allowInvalid) {
       return {
