@@ -13,7 +13,7 @@ const passthrough = process.argv.slice(2).filter((_, index, args) => {
 });
 
 const runtime = await readRuntimeConfig();
-const args = ["run", "context", "--", ...(query ? ["--query", query] : []), ...passthrough];
+const args = ["run", "--silent", "context", "--", ...(query ? ["--query", query] : []), ...passthrough];
 
 if (runtime?.toolingDir) {
   const command = process.platform === "win32" ? "npm.cmd" : "npm";
