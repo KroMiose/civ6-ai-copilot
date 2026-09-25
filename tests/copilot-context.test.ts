@@ -48,6 +48,25 @@ test("context automatically includes map evidence for exploration questions", as
   }
 });
 
+test("context maps broad turn-planning questions to turn-priority with map evidence", async () => {
+  const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-turn-"));
+  try {
+    await writeLatest(snapshotDir, "context-export-turn");
+    const report = await runCopilotContext({
+      refreshMode: "none",
+      snapshotDir,
+      question: "这回合我应该先做什么？"
+    });
+
+    assert.equal(report.status, "ready", JSON.stringify(report, null, 2));
+    assert.equal(report.summary?.syncAdvice.intents.includes("turn-priority"), true);
+    assert.equal(report.summary?.syncAdvice.requiredModules.includes("visibleMap"), true);
+    assert.ok(report.context?.visibleMap);
+  } finally {
+    await rm(snapshotDir, { recursive: true, force: true });
+  }
+});
+
 test("context refuses to silently fall back to stale analysis when refresh fails", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-fail-"));
   try {
