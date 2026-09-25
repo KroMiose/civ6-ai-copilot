@@ -36,6 +36,7 @@ export interface Civ6AICopilotPaths {
   skillInstallDir: string;
   commands: {
     copilot: string;
+    context: string;
     installModFromBundle: string;
     installSkill: string;
     validateInstalledSkill: string;
@@ -89,6 +90,7 @@ export function buildCiv6AICopilotPaths(options: Civ6AICopilotPathOptions = {}):
     commands: {
       installModFromBundle: `npm run mod -- install --clean --mods-dir ${quoteArg(modsDir)}`,
       copilot: `npm run copilot -- ${analysisArgs}`,
+      context: `npm run context -- --query "<player-question>"`,
       installSkill: `npm run skill:install -- --skills-dir ${quoteArg(pathApi.dirname(skillInstallDir))} --clean`,
       validateInstalledSkill: `npm run skill:validate-installed -- --skills-dir ${quoteArg(pathApi.dirname(skillInstallDir))}`,
       offlineSmoke: `npm run smoke:offline -- --output-dir ${quoteArg(pathApi.join(documentsDir, "civ6-ai-copilot-offline-smoke"))} --clean`,
@@ -127,6 +129,14 @@ export function formatCiv6AICopilotPathsMarkdown(paths: Civ6AICopilotPaths): str
     "Run these commands from `civ6-ai-copilot-release/tooling` or the project root after `npm install`. The standard Agent entry refreshes the current briefing, validates it, writes a handoff folder, and tells the Agent what to read.",
     "",
     "### Standard Agent Entry",
+    "",
+    "For normal Agent analysis use the canonical context contract. The legacy copilot/handoff pipeline remains available for compatibility and cross-device transfer.",
+    "",
+    "```bash",
+    paths.commands.context,
+    "```",
+    "",
+    "### Legacy Handoff Entry",
     "",
     "```bash",
     paths.commands.copilot,
