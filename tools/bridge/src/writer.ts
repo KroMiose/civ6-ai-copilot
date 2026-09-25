@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { mergeSnapshotModules, type ModuleSnapshot } from "../../snapshot/src/module-cache.js";
-import { validateSnapshotObject } from "../../snapshot/src/validate.js";
 
 interface SnapshotForPath {
   session?: {
@@ -25,17 +23,6 @@ export async function writeSnapshotOutputs(
   outputDir: string,
   metadata: { exportId: string }
 ): Promise<WrittenSnapshot> {
-  let previous: ModuleSnapshot | undefined;
-  try {
-    const candidate = JSON.parse(await readFile(path.join(outputDir, "latest.json"), "utf8"));
-    if ((await validateSnapshotObject(candidate)).ok) previous = candidate;
-  } catch { /* No usable cache: begin with this export. */ }
-  const incomingValid = (await validateSnapshotObject(snapshot)).ok;
-  if (incomingValid) {
-    snapshot = mergeSnapshotModules(previous, snapshot as ModuleSnapshot);
-    const mergedValidation = await validateSnapshotObject(snapshot);
-    if (!mergedValidation.ok) throw new Error(`Module merge failed validation: ${JSON.stringify(mergedValidation)}`);
-  }
   const typed = snapshot as SnapshotForPath;
   const sessionId = sanitizePathPart(String(typed.session?.sessionId ?? "unknown-session"));
   const gameTurn = Number.isInteger(typed.session?.gameTurn) ? String(typed.session?.gameTurn).padStart(4, "0") : "turn";

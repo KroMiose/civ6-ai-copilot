@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -8,66 +8,128 @@ import { runCopilotContext } from "../tools/copilot/src/context.js";
 
 const fixturePath = path.resolve("tests/fixtures/minimal-player-visible.snapshot.json");
 
-test("context returns one ready payload without requiring handoff file reads", async () => {
+test("context returns the full latest export when the agent does not name modules", async () => {
   const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-"));
   try {
     await writeLatest(snapshotDir, "context-export-0001");
     const report = await runCopilotContext({
       refreshMode: "none",
       snapshotDir,
-      question: "我的政策卡怎么换？"
+      question: "二城应该坐哪"
     });
 
     assert.equal(report.status, "ready", JSON.stringify(report, null, 2));
     assert.equal(report.identity?.exportId, "context-export-0001");
-    assert.equal(report.analysis?.intents.includes("policy"), true);
+    assert.ok(report.context?.cities);
+    assert.ok(report.context?.visibleMap);
     assert.ok(report.context?.government);
-    assert.equal(report.context?.visibleMap, undefined);
-    assert.equal("canonical" in report, false);
   } finally {
     await rm(snapshotDir, { recursive: true, force: true });
   }
 });
 
-test("context automatically includes map evidence for exploration questions", async () => {
-  const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-map-"));
+test("the player question does not change which modules are returned", async () => {
+  const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-query-"));
   try {
-    await writeLatest(snapshotDir, "context-export-0002");
+    await writeLatest(snapshotDir, "context-export-query");
+    const settling = await runCopilotContext({ refreshMode: "none", snapshotDir, question: "二城应该坐哪" });
+    const policy = await runCopilotContext({ refreshMode: "none", snapshotDir, question: "政策卡怎么换" });
+    assert.deepEqual(settling.modules, policy.modules);
+    assert.deepEqual(Object.keys(settling.context ?? {}).sort(), Object.keys(policy.context ?? {}).sort());
+  } finally {
+    await rm(snapshotDir, { recursive: true, force: true });
+  }
+});
+
+test("context returns only the modules the agent selected", async () => {
+  const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-modules-"));
+  try {
+    await writeLatest(snapshotDir, "context-export-modules");
     const report = await runCopilotContext({
       refreshMode: "none",
       snapshotDir,
-      question: "勇士下一步往哪里探索？"
+      modules: ["cities", "units", "visibleMap", "resources"]
     });
 
-    assert.equal(report.status, "ready", JSON.stringify(report, null, 2));
-    assert.equal(report.analysis?.intents.includes("exploration"), true);
+    assert.equal(report.status, "ready");
+    assert.ok(report.context?.cities);
     assert.ok(report.context?.units);
     assert.ok(report.context?.visibleMap);
+    assert.equal(report.context?.government, undefined);
+    assert.equal(report.context?.techs, undefined);
   } finally {
     await rm(snapshotDir, { recursive: true, force: true });
   }
 });
 
-test("context maps broad turn-planning questions to turn-priority with map evidence", async () => {
-  const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-turn-"));
+test("unavailable requested modules stay in a ready result as gaps", async () => {
+  const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-gap-"));
   try {
-    await writeLatest(snapshotDir, "context-export-turn");
+    const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
+    snapshot.governors.availability = "unavailable";
+    snapshot.trade.availability = "unavailable";
+    snapshot.cityStates.availability = "unavailable";
+    await writeLatest(snapshotDir, "context-export-gap", snapshot);
     const report = await runCopilotContext({
       refreshMode: "none",
       snapshotDir,
-      question: "这回合我应该先做什么？"
+      question: "这回合先做什么",
+      modules: ["cities", "governors", "trade", "cityStates"]
     });
 
     assert.equal(report.status, "ready", JSON.stringify(report, null, 2));
-    assert.equal(report.analysis?.intents.includes("turn-priority"), true);
-    assert.equal(report.analysis?.requiredModules.includes("visibleMap"), true);
-    assert.ok(report.context?.visibleMap);
+    assert.ok(report.context?.cities);
+    assert.match(report.gaps.join("\n"), /governors/);
+    assert.match(report.gaps.join("\n"), /trade/);
+    assert.match(report.gaps.join("\n"), /cityStates/);
   } finally {
     await rm(snapshotDir, { recursive: true, force: true });
   }
 });
 
-test("context refuses to silently fall back to stale analysis when refresh fails", async () => {
+test("adjacent-units uses odd-r neighbors from the current export", async () => {
+  const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-adjacent-"));
+  try {
+    await writeLatest(snapshotDir, "context-export-adjacent");
+    const report = await runCopilotContext({
+      refreshMode: "none",
+      snapshotDir,
+      modules: ["units", "visibleMap"],
+      adjacentUnits: true
+    });
+    const adjacent = report.context?.adjacentUnits as Array<{ name?: string; x: number; y: number; adjacentTiles: Array<{ direction: string; x: number; y: number; terrainType?: string }> }>;
+    const archer = adjacent.find((unit) => unit.name === "Archer");
+    assert.ok(archer);
+    assert.equal(archer.y % 2, 0);
+    const west = archer.adjacentTiles.find((tile) => tile.direction === "左侧");
+    assert.deepEqual({ x: west?.x, y: west?.y, terrainType: west?.terrainType }, { x: 12, y: 18, terrainType: "TERRAIN_GRASS" });
+  } finally {
+    await rm(snapshotDir, { recursive: true, force: true });
+  }
+});
+
+test("render-map writes an svg for the same export", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-map-"));
+  try {
+    const snapshotDir = path.join(rootDir, "snapshots");
+    const mapPath = path.join(rootDir, "visible-map.svg");
+    await writeLatest(snapshotDir, "context-export-map");
+    const report = await runCopilotContext({
+      refreshMode: "none",
+      snapshotDir,
+      modules: ["visibleMap"],
+      renderMapPath: mapPath
+    });
+    assert.equal(report.status, "ready", JSON.stringify(report, null, 2));
+    assert.equal(report.artifacts?.visibleMap?.path, mapPath);
+    const svg = await stat(mapPath);
+    assert.equal(svg.isFile(), true);
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("a missing log is a runtime error and does not return an old analysis", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-fail-"));
   try {
     const report = await runCopilotContext({
@@ -78,23 +140,27 @@ test("context refuses to silently fall back to stale analysis when refresh fails
       question: "这回合做什么？"
     });
 
-    assert.equal(report.status, "needs-game-refresh");
+    assert.equal(report.status, "runtime-error");
     assert.equal(report.readyForCopilot, false);
     assert.equal(report.context, undefined);
-    assert.equal(report.userActions.some((action) => action.includes("更新战情")), true);
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
 });
 
-async function writeLatest(outputDir: string, exportId: string): Promise<void> {
-  const snapshot = JSON.parse(await readFile(fixturePath, "utf8"));
-  snapshot.source = { ...snapshot.source, exportId };
+async function writeLatest(outputDir: string, exportId: string, source?: Record<string, unknown>): Promise<void> {
+  const snapshot = source ?? JSON.parse(await readFile(fixturePath, "utf8"));
+  snapshot.source = { ...(snapshot.source as Record<string, unknown>), exportId };
   snapshot.exportedAt = new Date().toISOString();
   for (const capture of Object.values(snapshot.moduleStatus ?? {}) as Array<{ capturedAt: string }>) {
     capture.capturedAt = snapshot.exportedAt as string;
   }
+  await mkdirLatest(outputDir, snapshot, exportId);
+}
 
+async function mkdirLatest(outputDir: string, snapshot: Record<string, unknown>, exportId: string): Promise<void> {
+  const { mkdir } = await import("node:fs/promises");
+  await mkdir(outputDir, { recursive: true });
   const latestPath = path.join(outputDir, "latest.json");
   const manifestPath = path.join(outputDir, "latest-manifest.json");
   const jsonText = `${JSON.stringify(snapshot, null, 2)}\n`;

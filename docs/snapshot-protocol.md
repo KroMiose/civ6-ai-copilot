@@ -31,8 +31,8 @@ bridge 拒绝：版本不匹配、不完整 BEGIN/END、exportId 不匹配、非
 
 - Mod 在同一载入会话、本地玩家、回合内累积模块，专题刷新整模块替换，包括合法的空数组；绝不逐个实体做深层 JSON merge。
 - tuner 缓存的最后一次导出也带累计模块，所以连续点地图、城市、资源后只读取一次仍能获得全部本回合专题。
-- bridge writer 对已经验证的旧 latest.json 做相同的模块级合并，防止部分导出覆盖其它专题；合并结果重新校验。不同 schema/compat/session/player 不复用缓存。
-- 跨回合移除旧 payload 和 modules 声明，只保留旧 moduleStatus 作为过期记录；旧单位位置不进入新回合分析或渲染。同会话的倒序回合导出被拒绝。
+- 游戏内导出在写入缓存前已经完成本次回合的模块累积。桌面 writer 把这份完成的导出整份写成 `latest.json`，不与上一份磁盘快照合并，也不因为回合变小而拒绝。回档后的新汇总因此成为当前战情。
+- 历史文件仍按 session 和 exportId 保留，但不是当前指针。旧单位位置不会从上一份 `latest.json` 并进这次导出。
 - government/policies 共用 government payload，两者必须一起刷新且采集记录相同。
 - meta/localPlayer 每次更新；source.exportId 和 exportedAt 标识本次导出，不代表所有模块同时采集。
 - modules 声明的模块必须有与 session.gameTurn 相同的 capturedTurn；schema 校验后还检查这些关系。

@@ -202,8 +202,7 @@ export async function runOfflineSmoke(options: OfflineSmokeOptions): Promise<Off
     refreshMode: "none",
     snapshotDir,
     question,
-    intents,
-    requiredModules
+    modules: requiredModules
   });
   steps.push({
     id: "context",
@@ -214,7 +213,7 @@ export async function runOfflineSmoke(options: OfflineSmokeOptions): Promise<Off
     details: {
       status: context.status,
       identity: context.identity,
-      checks: context.diagnostics?.checks
+      issues: context.diagnostics?.issues
     }
   });
   if (context.status !== "ready") {

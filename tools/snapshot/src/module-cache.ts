@@ -23,35 +23,10 @@ export interface ModuleSnapshot {
   [key: string]: unknown;
 }
 
+/** The completed export just read from the game replaces the previous briefing, including an earlier turn after a reload. */
 export function mergeSnapshotModules(previous: ModuleSnapshot | undefined, incoming: ModuleSnapshot): ModuleSnapshot {
-  const result = structuredClone(incoming);
-  if (!previous || !incoming.session?.sessionId || previous.schemaVersion !== incoming.schemaVersion ||
-      previous.source?.compatVersion !== incoming.source?.compatVersion ||
-      previous.session?.sessionId !== incoming.session.sessionId ||
-      previous.localPlayer?.localPlayerId !== incoming.localPlayer?.localPlayerId) return result;
-
-  // Reject delayed exports rather than replacing a newer turn with historical data.
-  if ((previous.session?.gameTurn ?? -1) > (incoming.session.gameTurn ?? -1)) {
-    throw new Error("Refusing an older turn from the same session; refresh the current game.");
-  }
-  result.moduleStatus = { ...previous.moduleStatus, ...incoming.moduleStatus };
-  if (previous.session?.gameTurn !== incoming.session.gameTurn) return result;
-
-  const modules = new Set(incoming.modules ?? []);
-  for (const moduleName of previous.modules ?? []) {
-    const oldCapture = previous.moduleStatus?.[moduleName];
-    const newCapture = incoming.moduleStatus?.[moduleName];
-    if (!oldCapture || oldCapture.capturedTurn !== incoming.session.gameTurn) continue;
-    // A cumulative sender can replay an older sibling module. Keep its newer capture.
-    if (!modules.has(moduleName) || (newCapture && Date.parse(oldCapture.capturedAt) > Date.parse(newCapture.capturedAt))) {
-      const field = MODULE_FIELDS[moduleName];
-      if (field) result[field] = structuredClone(previous[field]);
-      result.moduleStatus[moduleName] = structuredClone(oldCapture);
-      modules.add(moduleName);
-    }
-  }
-  result.modules = [...modules].sort();
-  return result;
+  void previous;
+  return structuredClone(incoming);
 }
 
 export function moduleContractErrors(snapshot: ModuleSnapshot): string[] {

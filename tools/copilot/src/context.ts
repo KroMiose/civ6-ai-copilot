@@ -1,17 +1,23 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
+import path from "node:path";
 import { buildCiv6AICopilotPaths, type Civ6AICopilotPaths } from "../../paths/src/civ6-paths.js";
+import { renderSnapshotMapToFile } from "../../render-map/src/render-map.js";
+import { COMPAT_VERSION, compatFromVersion } from "../../project/src/version.js";
+import { validateSnapshotObject } from "../../snapshot/src/validate.js";
+import { adjacentOwnUnits } from "./adjacent-units.js";
 import {
   runCopilotRefresh,
   type CopilotPrepareOptions,
   type CopilotRefreshReport
 } from "./prepare.js";
-import { runCopilotPreflight, type CopilotPreflightReport } from "./preflight.js";
-import type { SnapshotSummary } from "./summarize-snapshot.js";
 
 export type CopilotContextStatus = "ready" | "needs-game-refresh" | "runtime-error";
 
-export interface CopilotContextOptions extends Omit<CopilotPrepareOptions, "handoffDir" | "clean" | "includeSnapshot" | "renderMap"> {
-  includeMap?: boolean;
+export interface CopilotContextOptions extends Omit<CopilotPrepareOptions, "handoffDir" | "clean" | "includeSnapshot" | "renderMap" | "intents" | "requiredModules" | "maxAgeMinutes"> {
+  modules?: string[];
+  adjacentUnits?: boolean;
+  renderMapPath?: string;
 }
 
 export interface CopilotContextReport {
@@ -21,6 +27,7 @@ export interface CopilotContextReport {
   exitCode: number;
   generatedAt: string;
   query?: string;
+  modules: string[];
   identity?: {
     exportId?: string;
     sessionId?: string;
@@ -39,23 +46,17 @@ export interface CopilotContextReport {
     exportId?: string;
   };
   diagnostics?: {
-    checks?: CopilotPreflightReport["checks"];
     issues: string[];
     warnings: string[];
   };
-  analysis?: {
-    intents: string[];
-    requiredModules: string[];
-    counts: SnapshotSummary["coverage"]["counts"];
-    availableModules: string[];
-    notApplicableModules: string[];
-    unavailableModules: string[];
-    limitedModules: string[];
-    lowConfidenceModules: string[];
-    highlights: SnapshotSummary["highlights"];
-    gaps: string[];
-  };
+  gaps: string[];
   context?: Record<string, unknown>;
+  artifacts?: {
+    visibleMap?: {
+      path: string;
+      tiles: number;
+    };
+  };
   userActions: string[];
 }
 
@@ -78,9 +79,11 @@ const MODULE_TO_KEYS: Record<string, string[]> = {
   economy: ["economy"]
 };
 
-const MAP_INTENTS = new Set(["war", "navy", "exploration", "settling", "district-planning"]);
+const KNOWN_MODULES = Object.keys(MODULE_TO_KEYS);
+const DOMAIN_MODULES = new Set(["governors", "trade", "cityStates"]);
 
 export async function runCopilotContext(options: CopilotContextOptions = {}): Promise<CopilotContextReport> {
+  const modules = normalizeModules(options.modules);
   const paths = buildCiv6AICopilotPaths({
     platform: options.platform,
     homeDir: options.homeDir,
@@ -91,52 +94,89 @@ export async function runCopilotContext(options: CopilotContextOptions = {}): Pr
     codexHome: options.codexHome,
     snapshotDir: options.snapshotDir,
     question: options.question,
-    intents: options.intents,
-    requiredModules: options.requiredModules
+    requiredModules: modules
   });
 
   await mkdir(paths.snapshotDir, { recursive: true });
   const refresh = await runCopilotRefresh(paths, options);
   if (refresh.attempted && !refresh.ok) {
-    return {
-      contractVersion: "1",
-      status: "needs-game-refresh",
-      readyForCopilot: false,
-      exitCode: refresh.exitCode,
-      generatedAt: new Date().toISOString(),
-      query: options.question,
-      refresh: compactRefresh(refresh),
-      diagnostics: { issues: [refresh.summary], warnings: [] },
-      userActions: refreshActions(refresh, paths)
-    };
+    const status = noCompletedExport(refreshText(refresh)) ? "needs-game-refresh" : "runtime-error";
+    return incomplete(status, options.question, modules, refresh, [refreshText(refresh)], refreshActions(status, refresh, paths));
   }
 
-  const preflight = await runCopilotPreflight({
-    snapshotDir: paths.snapshotDir,
-    question: options.question,
-    intents: options.intents,
-    requiredModules: options.requiredModules,
-    maxAgeMinutes: options.maxAgeMinutes
-  });
-
-  if (!preflight.canAnalyze || !preflight.snapshotPath || !preflight.summary) {
-    return {
-      contractVersion: "1",
-      status: preflight.exitCode === 2 ? "needs-game-refresh" : "runtime-error",
-      readyForCopilot: false,
-      exitCode: preflight.exitCode,
-      generatedAt: new Date().toISOString(),
-      query: options.question,
-      refresh: compactRefresh(refresh),
-      diagnostics: compactDiagnostics(preflight),
-      analysis: preflight.summary ? compactAnalysis(preflight.summary) : undefined,
-      userActions: preflight.nextActions
-    };
+  const latestPath = path.join(paths.snapshotDir, "latest.json");
+  let snapshotText = "";
+  try {
+    snapshotText = await readFile(latestPath, "utf8");
+  } catch {
+    return incomplete(
+      "needs-game-refresh",
+      options.question,
+      modules,
+      refresh,
+      ["游戏里还没有一份写完的战情导出。"],
+      [
+        "在 Civ6 左上副官入口打开「战情简报」，点击「更新战情」。",
+        "看到“简报已汇总，可继续由AI副官分析。”后，再用同样的模块重新获取。"
+      ]
+    );
   }
 
-  const snapshot = JSON.parse(await readFile(preflight.snapshotPath, "utf8")) as Record<string, any>;
-  const includeMap = options.includeMap ?? shouldIncludeMap(preflight.summary);
-  const context = projectSnapshot(snapshot, preflight.summary, includeMap);
+  let snapshot: Record<string, any>;
+  try {
+    snapshot = JSON.parse(snapshotText) as Record<string, any>;
+  } catch (error) {
+    return incomplete("runtime-error", options.question, modules, refresh, [`latest.json 不是有效 JSON：${(error as Error).message}`], [
+      "重新点击「更新战情」，待面板显示已汇总后再获取。"
+    ]);
+  }
+
+  const validation = await validateSnapshotObject(snapshot);
+  if (!validation.ok) {
+    return incomplete("runtime-error", options.question, modules, refresh, [
+      ...validation.schemaErrors,
+      ...validation.fairnessIssues.map((issue) => `${issue.path} ${issue.message}`)
+    ], ["这次导出未通过可见性或结构校验，不要基于它给出对局建议。"]);
+  }
+
+  const compatIssue = incompatibleCompat(snapshot);
+  if (compatIssue) {
+    return incomplete("runtime-error", options.question, modules, refresh, [compatIssue], [
+      "升级 civ6-ai-copilot Mod 和本地工具，使二者的 major.minor 版本一致后再汇总。"
+    ]);
+  }
+
+  const manifest = await readManifest(paths.snapshotDir, snapshotText, snapshot);
+  if (manifest.issues.length > 0) {
+    return incomplete("runtime-error", options.question, modules, refresh, manifest.issues, [
+      "当前战情文件和 manifest 不一致。重新点击「更新战情」后再获取。"
+    ]);
+  }
+
+  const unknown = modules.filter((name) => !KNOWN_MODULES.includes(name));
+  const selected = (modules.length > 0 ? modules.filter((name) => KNOWN_MODULES.includes(name)) : modulesInSnapshot(snapshot));
+  const context = projectSnapshot(snapshot, selected);
+  const gaps = [
+    ...selected.flatMap((name) => unavailableGap(snapshot, name)),
+    ...unknown.map((name) => `未知模块 ${name}，未列入本次上下文。`),
+    ...selected.filter((name) => !moduleInExport(snapshot, name)).map((name) => `${name} 不在这次导出中。`)
+  ];
+
+  if (options.adjacentUnits) {
+    context.adjacentUnits = adjacentOwnUnits(snapshot);
+  }
+
+  let artifacts: CopilotContextReport["artifacts"];
+  const warnings = [...manifest.warnings];
+  if (options.renderMapPath) {
+    try {
+      await mkdir(path.dirname(options.renderMapPath), { recursive: true });
+      const rendered = await renderSnapshotMapToFile(latestPath, options.renderMapPath);
+      artifacts = { visibleMap: { path: options.renderMapPath, tiles: rendered.counts.tiles } };
+    } catch (error) {
+      warnings.push(`visible-map.svg 渲染失败：${(error as Error).message}`);
+    }
+  }
 
   return {
     contractVersion: "1",
@@ -145,110 +185,172 @@ export async function runCopilotContext(options: CopilotContextOptions = {}): Pr
     exitCode: 0,
     generatedAt: new Date().toISOString(),
     query: options.question,
-    identity: {
-      exportId: text(snapshot.source?.exportId),
-      sessionId: text(snapshot.session?.sessionId),
-      gameTurn: integer(snapshot.session?.gameTurn),
-      exportedAt: text(snapshot.exportedAt),
-      modVersion: text(snapshot.source?.modVersion),
-      compatVersion: text(snapshot.source?.compatVersion),
-      protocolVersion: text(snapshot.source?.protocolVersion),
-      schemaVersion: text(snapshot.schemaVersion)
-    },
+    modules: selected,
+    identity: identityOf(snapshot),
     refresh: compactRefresh(refresh),
-    diagnostics: compactDiagnostics(preflight),
-    analysis: compactAnalysis(preflight.summary),
+    diagnostics: { issues: [], warnings },
+    gaps,
     context,
+    artifacts,
     userActions: []
   };
 }
 
-function projectSnapshot(
-  snapshot: Record<string, any>,
-  summary: SnapshotSummary,
-  includeMap: boolean
-): Record<string, unknown> {
-  const keys = new Set<string>(["schemaVersion", "exportedAt", "source", "session", "localPlayer", "attention"]);
-  for (const moduleName of summary.syncAdvice.requiredModules) {
-    for (const key of MODULE_TO_KEYS[moduleName] ?? []) {
-      if (key !== "visibleMap" || includeMap) keys.add(key);
-    }
+function projectSnapshot(snapshot: Record<string, any>, modules: string[]): Record<string, unknown> {
+  const keys = new Set<string>(["schemaVersion", "exportedAt", "source", "session", "localPlayer"]);
+  for (const moduleName of modules) {
+    for (const key of MODULE_TO_KEYS[moduleName] ?? []) keys.add(key);
   }
-
-  if (includeMap && snapshot.visibleMap) keys.add("visibleMap");
-
   const projected: Record<string, unknown> = {};
   for (const key of keys) {
     if (snapshot[key] !== undefined) projected[key] = snapshot[key];
   }
-
   if (snapshot.moduleStatus && typeof snapshot.moduleStatus === "object") {
-    const relevantModules = new Set(summary.syncAdvice.requiredModules);
-    if (includeMap) relevantModules.add("visibleMap");
+    const relevant = new Set(modules);
     projected.moduleStatus = Object.fromEntries(
-      Object.entries(snapshot.moduleStatus).filter(([name]) => relevantModules.has(name))
+      Object.entries(snapshot.moduleStatus).filter(([name]) => relevant.has(name))
     );
   }
-
-  if (snapshot.confidence !== undefined) projected.confidence = snapshot.confidence;
+  if (Array.isArray(snapshot.modules)) {
+    projected.modules = snapshot.modules.filter((name: string) => modules.includes(name));
+  }
   return projected;
 }
 
-function shouldIncludeMap(summary: SnapshotSummary): boolean {
-  return summary.syncAdvice.requiredModules.includes("visibleMap")
-    || summary.syncAdvice.intents.some((intent) => MAP_INTENTS.has(intent));
+function modulesInSnapshot(snapshot: Record<string, any>): string[] {
+  const declared = Array.isArray(snapshot.modules) ? snapshot.modules.filter((name: unknown): name is string => typeof name === "string") : [];
+  const knownDeclared = declared.filter((name) => KNOWN_MODULES.includes(name));
+  return knownDeclared.length > 0 ? knownDeclared : KNOWN_MODULES.filter((name) => moduleInExport(snapshot, name));
 }
 
-function refreshActions(refresh: CopilotRefreshReport, paths: Civ6AICopilotPaths): string[] {
-  const actions = [
-    "在 Civ6 左上副官入口打开「战情简报」，点击「更新战情」。",
-    "看到“简报已汇总，可继续由AI副官分析。”后重新获取当前游戏上下文。"
-  ];
-  if (refresh.mode === "bridge") {
-    actions.unshift(`确认 Civ6 日志可由本地工具读取：${paths.luaLogPath}`);
+function moduleInExport(snapshot: Record<string, any>, moduleName: string): boolean {
+  if (Array.isArray(snapshot.modules) && snapshot.modules.includes(moduleName)) return true;
+  return (MODULE_TO_KEYS[moduleName] ?? []).some((key) => snapshot[key] !== undefined);
+}
+
+function unavailableGap(snapshot: Record<string, any>, moduleName: string): string[] {
+  if (!DOMAIN_MODULES.has(moduleName)) return [];
+  const field = MODULE_TO_KEYS[moduleName]?.[0];
+  const value = field ? snapshot[field] : undefined;
+  if (!value || typeof value !== "object" || (value as { availability?: unknown }).availability !== "unavailable") return [];
+  return [`${moduleName} 本次不可用，不能当成没有该对象。`];
+}
+
+function incomplete(
+  status: Exclude<CopilotContextStatus, "ready">,
+  query: string | undefined,
+  modules: string[],
+  refresh: CopilotRefreshReport,
+  issues: string[],
+  userActions: string[]
+): CopilotContextReport {
+  return {
+    contractVersion: "1",
+    status,
+    readyForCopilot: false,
+    exitCode: status === "needs-game-refresh" ? 2 : 1,
+    generatedAt: new Date().toISOString(),
+    query,
+    modules,
+    refresh: compactRefresh(refresh),
+    diagnostics: { issues, warnings: [] },
+    gaps: [],
+    userActions
+  };
+}
+
+function identityOf(snapshot: Record<string, any>): CopilotContextReport["identity"] {
+  return {
+    exportId: text(snapshot.source?.exportId),
+    sessionId: text(snapshot.session?.sessionId),
+    gameTurn: Number.isInteger(snapshot.session?.gameTurn) ? snapshot.session.gameTurn : undefined,
+    exportedAt: text(snapshot.exportedAt),
+    modVersion: text(snapshot.source?.modVersion),
+    compatVersion: text(snapshot.source?.compatVersion),
+    protocolVersion: text(snapshot.source?.protocolVersion),
+    schemaVersion: text(snapshot.schemaVersion)
+  };
+}
+
+function incompatibleCompat(snapshot: Record<string, any>): string | undefined {
+  const declared = text(snapshot.source?.compatVersion);
+  const inferred = text(snapshot.source?.modVersion) ? compatFromVersion(String(snapshot.source.modVersion)) : undefined;
+  const snapshotCompat = declared ?? inferred;
+  if (!snapshotCompat) return "snapshot 未提供 source.compatVersion，且无法从 source.modVersion 推导兼容版本。";
+  if (snapshotCompat !== COMPAT_VERSION) {
+    return `snapshot 兼容版本是 ${snapshotCompat}，当前工具需要 ${COMPAT_VERSION}。`;
   }
-  return actions;
+  return undefined;
 }
 
-function text(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function integer(value: unknown): number | undefined {
-  return Number.isInteger(value) ? Number(value) : undefined;
+async function readManifest(
+  snapshotDir: string,
+  snapshotText: string,
+  snapshot: Record<string, any>
+): Promise<{ issues: string[]; warnings: string[] }> {
+  const manifestPath = path.join(snapshotDir, "latest-manifest.json");
+  let manifestText = "";
+  try {
+    manifestText = await readFile(manifestPath, "utf8");
+  } catch {
+    return { issues: [], warnings: ["没有找到 latest-manifest.json；继续使用这次导出。"] };
+  }
+  let manifest: { exportId?: unknown; checksumSha256?: unknown; checksumScope?: unknown };
+  try {
+    manifest = JSON.parse(manifestText) as typeof manifest;
+  } catch (error) {
+    return { issues: [`latest-manifest.json 不是有效 JSON：${(error as Error).message}`], warnings: [] };
+  }
+  const issues: string[] = [];
+  const checksum = createHash("sha256").update(Buffer.from(snapshotText, "utf8")).digest("hex");
+  if (manifest.checksumScope !== "latest-json-file") issues.push("latest-manifest.json 的 checksumScope 不是 latest-json-file。");
+  if (manifest.checksumSha256 !== checksum) issues.push("latest-manifest.json checksumSha256 与 latest.json 内容不一致。");
+  if (typeof manifest.exportId === "string" && text(snapshot.source?.exportId) && manifest.exportId !== snapshot.source.exportId) {
+    issues.push("latest-manifest.json exportId 与 snapshot.source.exportId 不一致。");
+  }
+  return { issues, warnings: [] };
 }
 
 function compactRefresh(refresh: CopilotRefreshReport): CopilotContextReport["refresh"] {
   const result = refresh.result;
-  const exportId = result && "exportId" in result ? result.exportId : undefined;
   return {
     mode: refresh.mode,
     attempted: refresh.attempted,
     ok: refresh.ok,
     reused: Boolean(result && "skipped" in result && result.skipped),
-    exportId
+    exportId: result && "exportId" in result ? result.exportId : undefined
   };
 }
 
-function compactDiagnostics(preflight: CopilotPreflightReport): CopilotContextReport["diagnostics"] {
-  return {
-    checks: preflight.checks,
-    issues: preflight.issues,
-    warnings: preflight.warnings
-  };
+function refreshText(refresh: CopilotRefreshReport): string {
+  const result = refresh.result;
+  if (result && "error" in result && result.error) return result.error;
+  return refresh.summary;
 }
 
-function compactAnalysis(summary: SnapshotSummary): NonNullable<CopilotContextReport["analysis"]> {
-  return {
-    intents: summary.syncAdvice.intents,
-    requiredModules: summary.syncAdvice.requiredModules,
-    counts: summary.coverage.counts,
-    availableModules: summary.coverage.availableModules,
-    notApplicableModules: summary.syncAdvice.notApplicableModules,
-    unavailableModules: summary.syncAdvice.unavailableModules,
-    limitedModules: summary.syncAdvice.limitedModules,
-    lowConfidenceModules: summary.syncAdvice.lowConfidenceModules,
-    highlights: summary.highlights,
-    gaps: summary.gaps
-  };
+function noCompletedExport(text: string): boolean {
+  return /no-cached-export|No complete civ6-ai-copilot snapshot|没有找到 snapshot/i.test(text);
+}
+
+function refreshActions(
+  status: Exclude<CopilotContextStatus, "ready">,
+  refresh: CopilotRefreshReport,
+  paths: Civ6AICopilotPaths
+): string[] {
+  if (status === "needs-game-refresh") {
+    return [
+      "在 Civ6 左上副官入口打开「战情简报」，点击「更新战情」。",
+      "看到“简报已汇总，可继续由AI副官分析。”后，再用同样的模块重新获取。"
+    ];
+  }
+  const where = refresh.mode === "bridge" ? `日志：${paths.luaLogPath}` : "Tuner 连接";
+  return [`读取当前战情失败（${where}）：${refreshText(refresh)}`, "确认游戏正在运行，并且本机工具可以读取日志或 Tuner。"];
+}
+
+function normalizeModules(values: string[] | undefined): string[] {
+  return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
+}
+
+function text(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }

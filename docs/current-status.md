@@ -4,7 +4,7 @@
 
 ## 当前版本
 
-- 项目版本：`0.3.2`
+- 项目版本：`0.3.3`
 - 兼容版本：`0.3`
 - 协议版本：`0.3.0`
 - Schema 版本：`0.3.0`
@@ -12,7 +12,7 @@
 
 版本来源是仓库根目录的 `project-version.json`。Mod、skill、schema 和协议读取同一个版本源，避免在多个文件中硬编码。
 
-0.3.2 在 0.3 数据协议上发布 Agent context Runtime：日常分析改为一次 `context` 调用。游戏内 Mod 行为与 `0.3.1` 相同，Steam Workshop 不在本版更新。Windows/Aspyr 实机验证和双人多人公平测试仍待完成，离线验证不能替代这些手工门槛。
+0.3.3 让 Agent 按模块清单组装查询，工具只返回最后一次成功汇总。游戏内 Mod 行为与 `0.3.1` 相同，Steam Workshop 不在本版更新。Windows/Aspyr 实机验证和双人多人公平测试仍待完成，离线验证不能替代这些手工门槛。
 
 ## 当前能力
 
@@ -22,7 +22,7 @@
 - 默认关闭的「每回合自动更新」；开启后每个本地玩家回合刷新全部已实现模块，包含预算限制的可见地图。
 - `Lua.log` marker bridge 与 macOS/Aspyr `tuner-bridge` 读取缓存通道。
 - Snapshot schema、fairness 校验、doctor、preflight、summary、visible map render、handoff。
-- 单次调用的 Agent context Runtime：自动完成取数、预检、意图推断、当前导出身份确认和问题相关上下文投影；旧 handoff 链保留兼容。
+- 单次调用的 Agent context Runtime：读取最后一次成功汇总，按 Agent 点名的模块返回；旧 handoff 链保留给排障和跨机流程。
 - Agent Skill 安装、校验、打包和 Mod-first 情报更新引导。
 - Mod package、skill package、release bundle、manual evidence 和 RC gate。
 

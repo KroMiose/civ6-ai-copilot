@@ -33,17 +33,17 @@ npm run mod -- package --output-dir ./release --clean
 
 ## 标准入口
 
-日常 Agent 分析不要再手工组织 intent、handoff 和多份文件。安装后的 Skill 使用自带 wrapper：
+日常 Agent 分析使用安装后的 wrapper。原话不决定读取哪些模块；Agent 按 `SKILL.md` 的清单自己传 `--module`。不传则返回最后一次成功汇总里的全部模块。
 
 ```bash
-node scripts/context.mjs --query "<用户原话>"
+node scripts/context.mjs --module cities --module units --module visibleMap --adjacent-units --render-map "<输出路径>/visible-map.svg"
 ```
 
-wrapper 从 Skill 安装时生成的 `runtime.json` 定位 tooling，因此不依赖当前工作目录。Runtime 会按平台刷新当前战情、验证唯一 canonical snapshot、根据用户原话推断分析焦点，并一次返回 JSON context。
+wrapper 从 Skill 安装时生成的 `runtime.json` 定位 tooling，因此不依赖当前工作目录。Runtime 读取游戏里最后一份写完的导出，校验后按点名的模块返回 JSON。
 
-- `status=ready`：直接分析返回的 `summary` 与 `context`。
-- `status=needs-game-refresh`：转述 `userActions`，让玩家在战情简报点击「更新战情」。
-- `status=runtime-error`：按错误动作排障，不要搜索源码或文件系统猜运行路径。
+- `status=ready`：用返回的 `context` 回答。`gaps` 里的 `unavailable` 不能当成空结果。
+- `status=needs-game-refresh`：只有游戏里还没有写完的导出时才出现。转述 `userActions`。
+- `status=runtime-error`：按错误动作排障，不要搜索源码或历史 snapshot。
 
 开发者可直接运行：
 

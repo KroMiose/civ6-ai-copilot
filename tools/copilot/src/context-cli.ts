@@ -6,9 +6,10 @@ import type { CopilotRefreshMode } from "./prepare.js";
 program
   .name("civ6-ai-copilot-context")
   .description("Return one canonical, validated Civ6 context payload for Agent analysis.")
-  .option("--query <text>", "The player's current question. Runtime infers the analysis focus from it.")
-  .option("--intent <intent>", "Optional stable intent override; repeat or comma-separate.", collectList, [])
-  .option("--module <module>", "Optional required module override; repeat or comma-separate.", collectList, [])
+  .option("--query <text>", "The player's question. Stored for the agent; it does not select modules.")
+  .option("--module <module>", "Module to include. Repeat or comma-separate. Omit to return every module in the latest export.", collectList, [])
+  .option("--adjacent-units", "Add odd-r adjacent tiles for the local player's units.", false)
+  .option("--render-map <path>", "Write a player-visible hex SVG for this export.")
   .option("--platform <platform>", "Target platform: win32, darwin, or linux. Defaults to the current platform.")
   .option("--home <dir>", "Target user's home directory. Defaults to the current user's home.")
   .option("--civ6-user-data-dir <dir>", "Override the Civ6 user-data root.")
@@ -18,8 +19,6 @@ program
   .option("--codex-home <dir>", "Codex home directory. Defaults to <home>/.codex.")
   .option("--snapshot-dir <dir>", "Snapshot output directory.")
   .option("--refresh <mode>", "Snapshot refresh mode: auto, tuner, bridge, or none.", "auto")
-  .option("--max-age-minutes <minutes>", "Reject snapshots older than this many minutes; default is 30.", Number.parseFloat)
-  .option("--include-map", "Force visibleMap into the returned context even if the inferred focus does not require it.", false)
   .option("--host <host>", "Tuner host.", "127.0.0.1")
   .option("--port <port>", "Specific tuner port; defaults to trying 4318 then 4319.", parsePort)
   .option("--state <name>", "Lua state to read from; defaults to project luaStateName.")
@@ -31,8 +30,9 @@ program
 const options = program.opts<{
   query?: string;
   question?: string;
-  intent: string[];
   module: string[];
+  adjacentUnits: boolean;
+  renderMap?: string;
   platform?: "win32" | "darwin" | "linux";
   home?: string;
   civ6UserDataDir?: string;
@@ -42,8 +42,6 @@ const options = program.opts<{
   codexHome?: string;
   snapshotDir?: string;
   refresh: string;
-  maxAgeMinutes?: number;
-  includeMap: boolean;
   host: string;
   port?: number;
   state?: string;
@@ -57,8 +55,9 @@ if (!isRefreshMode(options.refresh)) {
 
 const report = await runCopilotContext({
   question: options.query ?? options.question,
-  intents: options.intent,
-  requiredModules: options.module,
+  modules: options.module,
+  adjacentUnits: options.adjacentUnits,
+  renderMapPath: options.renderMap,
   platform: options.platform,
   homeDir: options.home,
   civ6UserDataDir: options.civ6UserDataDir,
@@ -68,8 +67,6 @@ const report = await runCopilotContext({
   codexHome: options.codexHome,
   snapshotDir: options.snapshotDir,
   refreshMode: options.refresh,
-  maxAgeMinutes: options.maxAgeMinutes,
-  includeMap: options.includeMap,
   host: options.host,
   port: options.port,
   state: options.state,

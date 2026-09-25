@@ -44,7 +44,8 @@
 | D-019 | 会话与偏好 | exportId 独立唯一；无法证明跨载入稳定的游戏 ID 时使用明确标注的本次载入 session，不以地图种子或回合号冒充游戏 ID；跨载入趋势及偏好持久化待验证。 |
 | D-020 | 首批决策数据（所有者已确认） | 手动入口统一为「更新战情」并采集完整已实现模块。补己方选择上下文、城市基础设施/生产/粮食、单位状态、总督、商路和已遇见城邦使者；仅使用有原生 UI 依据的只读接口，缺失与不适用明确表达。同步升级 0.3 contract、Skill 和验证；不包含第二批复杂行动枚举或自动游戏操作。自动更新范围由 D-021 覆盖。 |
 | D-021 | 完整自动更新与面板整理（所有者本轮授权） | 根据实机速度反馈，开启自动更新后每个己方回合刷新全部已实现模块，包含有预算限制的可见地图，与手动更新采用相同采集范围；覆盖 D-014/D-020 的轻量自动路径，保留默认关闭、延迟执行、回合去重、忙碌保护和跨回合取消。面板统一内容边界与按钮样式，压缩空白，仅呈现更新状态、采集回合、进度和玩家操作；实现术语保留在诊断与开发文档，不展示给玩家。不改变多人可见性边界，不新增无界地图扫描。 |
-| D-022 | Agent Runtime Contract | 日常 Agent 分析改为一次调用 `context`：Runtime 完成路径发现、平台取数、唯一当前 snapshot 选择、manifest/schema/fairness/新鲜度检查、自然语言意图推断和有界上下文投影，并返回带 `exportId/sessionId/gameTurn` 身份的 JSON contract。Agent 不应在正常路径研究源码、搜索 tooling、手工选择 latest 或拼接 handoff。刷新失败时必须先失效旧 handoff，禁止把旧产物冒充当前状态。 |
+| D-022 | Agent Runtime Contract | 日常 Agent 分析改为一次调用 `context`：Runtime 完成路径发现、平台取数、唯一当前 snapshot 选择、manifest/schema/fairness 校验，并返回带 `exportId/sessionId/gameTurn` 身份的 JSON contract。Agent 不应在正常路径研究源码、搜索 tooling、手工挑选历史 snapshot 或拼接 handoff。 |
+| D-023 | Agent 组装查询（所有者已确认） | Skill 列出可读取的模块和派生项。Agent 根据用户问题选择 `--module`，并可另要 `--adjacent-units` 与 `--render-map`。不传模块时返回最后一次成功汇总的全部已采集模块。`--query` 只记录原话，不参与选择。`unavailable` 写入 gaps，不阻断 `ready`。导出时间不作为拒绝条件。游戏刚刚写完的导出整份成为当前战情，回合变小同样覆盖。`needs-game-refresh` 只表示还没有写完的导出。 |
 
 影响这些决策的变更需要先更新本表或新增 ADR，再进入实现。
 
@@ -128,7 +129,7 @@ flowchart LR
 
 ```json
 {
-  "version": "0.3.2",
+  "version": "0.3.3",
   "compatVersion": "0.3",
   "protocolVersion": "0.3.0",
   "schemaVersion": "0.3.0"

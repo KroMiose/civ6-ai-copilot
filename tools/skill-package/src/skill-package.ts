@@ -330,7 +330,7 @@ async function writeSkillPackageChecklist(packageDir: string): Promise<void> {
     "## Expected behavior",
     "",
     "- The skill must use the single context runtime first; handoff/preflight/summarize/doctor are compatibility and diagnostics paths.",
-    "- If war/map/policy/city data is missing, it should ask the player to open the Civ6 AI briefing panel and click `更新战情` (`Update Briefing`).",
+    "- If the game has no completed export, ask the player to open the Civ6 AI briefing panel and click `更新战情` (`Update Briefing`). An unavailable module is a gap, not a reason to demand another refresh.",
     "- It must keep multiplayer advice limited to local-player visible information.",
     "- It must treat doctor failures, manifest mismatches, or reason=\"exported\" mismatches as sync blockers.",
     "- If the user asks to install or update the skill, it should download the latest GitHub Release or repository skill folder, replace the old skill folder, and report version plus compatVersion.",
