@@ -26,11 +26,13 @@ Prefer the latest GitHub Release. If no Release is available yet, install the sk
 When finished, tell me the skill version, local tooling directory, and whether I need to restart the client or open a new chat.
 ```
 
-For later updates, you can simply say:
+For later updates, copy this prompt:
 
 ```text
-Please update my civ6-ai-copilot skill and local helper tools to the latest version.
+Please choose the highest-version release (including pre-releases) from https://github.com/KroMiose/civ6-ai-copilot/releases and update my civ6-ai-copilot Agent Skill and local helper tools. Validate the installation and tell me the installed version. The Mod and Skill must have the same compatVersion. If the Steam Workshop Mod has not updated yet, remind me to wait for the download and click Update Briefing in-game to create a new snapshot.
 ```
+
+When upgrading from `0.1.x` to `0.3.1`, update the Mod, Skill, and local tools together. Old snapshots cannot be used with the 0.3 protocol.
 
 ## First Use
 
@@ -83,4 +85,4 @@ If your multiplayer room restricts UI or utility Mods, follow the room rules fir
 
 - [Developer and maintainer docs](docs/README.md)
 
-Repository version: `0.3.1` (not released yet).
+Current pre-release version: `0.3.1`.
