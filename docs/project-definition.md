@@ -31,7 +31,7 @@
 | D-006 | 情报粒度 | 手动为主；按问题分析已采集模块。「每回合自动更新」默认关闭。 |
 | D-007 | 版本规则 | 使用 `a.b.c`。`a.b` 是 skill + Mod 兼容组合，`c` 是不破坏兼容的修复。 |
 | D-008 | 工具链 | Lua for Mod；TypeScript/Node for CLI、schema、package、release；research 不作为运行时依赖。 |
-| D-009 | Skill 行为 | Skill 优先运行标准入口并读取其 handoff 产物；信息不足时给出具体战情简报动作。 |
+| D-009 | Skill 行为 | Skill 日常分析优先调用单一 context Runtime contract；handoff/preflight/summarize 保留为兼容与诊断路径。信息不足时只转述 Runtime 给出的战情简报动作。 |
 | D-010 | 玩家位置表达 | 坐标用于内部分析和 SVG；面向玩家默认使用相对位置和可见锚点。 |
 | D-011 | 发布渠道 | GitHub release、Steam Workshop、Agent Skill package、统一 release bundle。 |
 | D-012 | 产品语言 | 用户可见文字遵循 `docs/product-language.md`：克制、专业、游戏内战情语境；README 提供简体中文和英文入口；Skill 按用户提问语言回答并使用对应 Civ6 本地化术语。 |
@@ -44,6 +44,7 @@
 | D-019 | 会话与偏好 | exportId 独立唯一；无法证明跨载入稳定的游戏 ID 时使用明确标注的本次载入 session，不以地图种子或回合号冒充游戏 ID；跨载入趋势及偏好持久化待验证。 |
 | D-020 | 首批决策数据（所有者已确认） | 手动入口统一为「更新战情」并采集完整已实现模块。补己方选择上下文、城市基础设施/生产/粮食、单位状态、总督、商路和已遇见城邦使者；仅使用有原生 UI 依据的只读接口，缺失与不适用明确表达。同步升级 0.3 contract、Skill 和验证；不包含第二批复杂行动枚举或自动游戏操作。自动更新范围由 D-021 覆盖。 |
 | D-021 | 完整自动更新与面板整理（所有者本轮授权） | 根据实机速度反馈，开启自动更新后每个己方回合刷新全部已实现模块，包含有预算限制的可见地图，与手动更新采用相同采集范围；覆盖 D-014/D-020 的轻量自动路径，保留默认关闭、延迟执行、回合去重、忙碌保护和跨回合取消。面板统一内容边界与按钮样式，压缩空白，仅呈现更新状态、采集回合、进度和玩家操作；实现术语保留在诊断与开发文档，不展示给玩家。不改变多人可见性边界，不新增无界地图扫描。 |
+| D-022 | Agent Runtime Contract | 日常 Agent 分析改为一次调用 `context`：Runtime 完成路径发现、平台取数、唯一当前 snapshot 选择、manifest/schema/fairness/新鲜度检查、自然语言意图推断和有界上下文投影，并返回带 `exportId/sessionId/gameTurn` 身份的 JSON contract。Agent 不应在正常路径研究源码、搜索 tooling、手工选择 latest 或拼接 handoff。刷新失败时必须先失效旧 handoff，禁止把旧产物冒充当前状态。 |
 
 影响这些决策的变更需要先更新本表或新增 ADR，再进入实现。
 
@@ -56,13 +57,14 @@ flowchart LR
   B --> D["ExposedMembers cached marker stream"]
   C --> E["bridge CLI"]
   D --> F["tuner-bridge CLI"]
-  E --> P["copilot prepare CLI"]
-  F --> P
-  P --> G["latest.json + latest-manifest.json"]
-  G --> H["schema + fairness validation"]
-  G --> I["preflight + summary + map renderer"]
-  I --> J["handoff directory"]
-  J --> K["Agent Skill"]
+  E --> G["canonical snapshot store"]
+  F --> G
+  G --> H["schema + fairness + freshness"]
+  H --> CXT["context Runtime / projection"]
+  CXT --> K["Agent Skill"]
+  H --> I["preflight + summary + map renderer"]
+  I --> J["legacy/cross-device handoff"]
+  J --> K
 ```
 
 分层职责：
@@ -71,7 +73,7 @@ flowchart LR
 - `tools/bridge/`：解析 `Lua.log` marker，校验分块结构、schema 和 fairness。
 - `tools/tuner-bridge/`：读取 Mod 已缓存的同一份 marker 分块，用于没有 `Lua.log` 的环境。
 - `schemas/`：定义 snapshot contract。
-- `tools/copilot/`：标准入口、preflight、summary、handoff 和 AI 交接材料。
+- `tools/copilot/`：单一 context Runtime、兼容的 prepare/handoff、preflight、summary 和 AI 交接材料。
 - `tools/render-map/`：把玩家可见地图渲染为 hex SVG。
 - `skill/`：Agent Skill，负责情报更新引导，并按用户提问语言提供建议。
 - `tests/`：自动化测试、fixture 和手工测试模板。
@@ -154,7 +156,7 @@ flowchart LR
 
 内部模块包括 `selection`、`cities`、`units`、`governors`、`trade`、`cityStates`、`techs`、`civics`、`government`、`policies`、`resources`、`diplomacyPublic`、`visibleMap` 和 `economy`。城市/单位等模块用于意图分析和有界摘要，玩家只需通过「更新战情」刷新。
 
-Skill 判断信息不足时应输出具体动作，例如：
+Skill 日常调用 `context --query "<用户原话>"`。Runtime 返回 `status=ready` 时直接基于 `summary/context` 分析；返回 `needs-game-refresh` 时只输出具体动作，例如：
 
 ```text
 判断前需要前线可见地块和单位位置。请打开战情简报，点击「更新战情」，等 bridge 刷新 latest.json 后再判断是否开战。
@@ -167,7 +169,7 @@ Skill 判断信息不足时应输出具体动作，例如：
 - schema/fairness validation
 - bridge marker parser、分块完整性、writer manifest 文件指纹
 - tuner-bridge fake socket
-- preflight/summarize/handoff
+- context Runtime、preflight/summarize/handoff
 - map renderer
 - package/release manifest
 - Mod safety/static validation
