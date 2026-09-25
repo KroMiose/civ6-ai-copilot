@@ -1,6 +1,16 @@
 import os from "node:os";
 import path from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+
+const CIV6_STEAM_APP_ID = "289070";
+const CIV6_WINDOWS_USER_DATA_SUBDIR = path.posix.join("Documents", "My Games", "Sid Meier's Civilization VI");
+const CIV6_WINDOWS_LOGS_SUBDIR = path.posix.join(
+  "AppData",
+  "Local",
+  "Firaxis Games",
+  "Sid Meier's Civilization VI",
+  "Logs"
+);
 
 export type Civ6PathPlatform = "win32" | "darwin" | "linux";
 
@@ -56,9 +66,10 @@ export function buildCiv6AICopilotPaths(options: Civ6AICopilotPathOptions = {}):
   const pathApi = platform === "win32" ? path.win32 : path.posix;
   const homeDir = options.homeDir ?? defaultHomeDir(platform);
   const documentsDir = pathApi.join(homeDir, "Documents");
-  const civ6UserDataDir = options.civ6UserDataDir ?? defaultCiv6UserDataDir(platform, homeDir);
+  const protonPaths = platform === "linux" ? detectSteamProtonCiv6Paths(homeDir) : undefined;
+  const civ6UserDataDir = options.civ6UserDataDir ?? protonPaths?.civ6UserDataDir ?? defaultCiv6UserDataDir(platform, homeDir);
   const modsDir = options.modsDir ?? defaultCiv6ModsDir(platform, civ6UserDataDir);
-  const logsDir = options.logsDir ?? defaultCiv6LogsDir(platform, civ6UserDataDir, homeDir);
+  const logsDir = options.logsDir ?? protonPaths?.logsDir ?? defaultCiv6LogsDir(platform, civ6UserDataDir, homeDir);
   const luaLogPath = options.luaLogPath ?? pathApi.join(logsDir, "Lua.log");
   const moddingLogPath = pathApi.join(logsDir, "Modding.log");
   const userInterfaceLogPath = pathApi.join(logsDir, "UserInterface.log");
@@ -308,6 +319,62 @@ function defaultCiv6LogsDir(platform: Civ6PathPlatform, civ6UserDataDir: string,
     return path.posix.join(civ6UserDataDir, "Firaxis Games", "Sid Meier's Civilization VI", "Logs");
   }
   return path.posix.join(civ6UserDataDir, "Logs");
+}
+
+function detectSteamProtonCiv6Paths(
+  homeDir: string
+): { civ6UserDataDir: string; logsDir: string } | undefined {
+  for (const steamappsDir of steamappsDirCandidates(homeDir)) {
+    const steamUserDir = path.posix.join(
+      steamappsDir,
+      "compatdata",
+      CIV6_STEAM_APP_ID,
+      "pfx",
+      "drive_c",
+      "users",
+      "steamuser"
+    );
+    const civ6UserDataDir = path.posix.join(steamUserDir, CIV6_WINDOWS_USER_DATA_SUBDIR);
+    const logsDir = path.posix.join(steamUserDir, CIV6_WINDOWS_LOGS_SUBDIR);
+
+    if (existsSync(logsDir) || existsSync(civ6UserDataDir)) {
+      return { civ6UserDataDir, logsDir };
+    }
+  }
+
+  return undefined;
+}
+
+function steamappsDirCandidates(homeDir: string): string[] {
+  const baseCandidates = [
+    path.posix.join(homeDir, ".steam", "steam"),
+    path.posix.join(homeDir, ".local", "share", "Steam"),
+    path.posix.join(homeDir, "Steam"),
+    path.posix.join(homeDir, "Games", "SteamLibrary"),
+    path.posix.join(homeDir, "data", "SteamLibrary")
+  ];
+  const steamappsDirs = baseCandidates.map((baseDir) => path.posix.join(baseDir, "steamapps"));
+
+  for (const steamappsDir of [...steamappsDirs]) {
+    for (const libraryDir of steamLibraryDirsFromVdf(path.posix.join(steamappsDir, "libraryfolders.vdf"))) {
+      steamappsDirs.push(path.posix.join(libraryDir, "steamapps"));
+    }
+  }
+
+  return [...new Set(steamappsDirs)];
+}
+
+function steamLibraryDirsFromVdf(vdfPath: string): string[] {
+  if (!existsSync(vdfPath)) {
+    return [];
+  }
+
+  try {
+    const content = readFileSync(vdfPath, "utf8");
+    return [...content.matchAll(/"path"\s+"([^"]+)"/g)].map((match) => match[1].replace(/\\\\/g, "\\"));
+  } catch {
+    return [];
+  }
 }
 
 function defaultHomeDir(platform: Civ6PathPlatform): string {
