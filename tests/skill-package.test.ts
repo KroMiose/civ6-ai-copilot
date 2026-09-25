@@ -26,6 +26,7 @@ test("skill package validator accepts the repository skill source", async () => 
   assert.equal(validation.files.includes("references/mod-usage-guide.md"), true);
   assert.equal(validation.files.includes("references/sync-module-guide.md"), true);
   assert.equal(validation.files.includes("scripts/suggest-sync.mjs"), true);
+  assert.equal(validation.files.includes("scripts/context.mjs"), true);
 });
 
 test("skill package command creates a manifest and install checklist", async () => {
@@ -77,6 +78,10 @@ test("skill installer copies the Mod-guided skill into a Codex skills directory"
     await stat(path.join(result.targetDir, "references", "in-game-briefing-guide.md"));
     await stat(path.join(result.targetDir, "references", "mod-usage-guide.md"));
     await stat(path.join(result.targetDir, "scripts", "suggest-sync.mjs"));
+    await stat(path.join(result.targetDir, "scripts", "context.mjs"));
+    const runtime = JSON.parse(await readFile(path.join(result.targetDir, "runtime.json"), "utf8"));
+    assert.equal(runtime.contractVersion, "1");
+    assert.equal(runtime.toolingDir, path.resolve(sourceDir, ".."));
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }

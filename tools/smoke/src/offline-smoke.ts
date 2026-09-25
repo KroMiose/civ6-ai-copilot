@@ -2,6 +2,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { runCopilotHandoff } from "../../copilot/src/handoff.js";
+import { runCopilotContext } from "../../copilot/src/context.js";
 import { formatSnapshotSummaryMarkdown, summarizeSnapshotFile } from "../../copilot/src/summarize-snapshot.js";
 import { runCopilotPreflight } from "../../copilot/src/preflight.js";
 import { runBridgeOnce } from "../../bridge/src/bridge.js";
@@ -182,6 +183,41 @@ export async function runOfflineSmoke(options: OfflineSmokeOptions): Promise<Off
     details: preflight
   });
   if (!preflight.canAnalyze) {
+    return await finalizeReport({
+      outputDir,
+      luaLogPath,
+      snapshotDir,
+      latestPath: bridge.written.latestPath,
+      manifestPath: bridge.written.manifestPath,
+      summaryPath,
+      mapPath,
+      question,
+      intents,
+      requiredModules,
+      steps
+    });
+  }
+
+  const context = await runCopilotContext({
+    refreshMode: "none",
+    snapshotDir,
+    question,
+    intents,
+    requiredModules
+  });
+  steps.push({
+    id: "context",
+    status: context.status === "ready" ? "pass" : "fail",
+    message: context.status === "ready"
+      ? "单一 Agent context Runtime 已返回可分析的 canonical context。"
+      : "Agent context Runtime 未返回 ready。",
+    details: {
+      status: context.status,
+      identity: context.identity,
+      checks: context.diagnostics?.checks
+    }
+  });
+  if (context.status !== "ready") {
     return await finalizeReport({
       outputDir,
       luaLogPath,

@@ -29,6 +29,7 @@ export interface CreateSkillPackageResult {
 export interface InstallSkillOptions {
   sourceDir: string;
   skillsDir?: string;
+  toolingDir?: string;
   clean?: boolean;
 }
 
@@ -63,7 +64,8 @@ const requiredFiles = [
   "references/multiplayer-fairness.md",
   "references/snapshot-schema.md",
   "references/sync-module-guide.md",
-  "scripts/suggest-sync.mjs"
+  "scripts/suggest-sync.mjs",
+  "scripts/context.mjs"
 ];
 
 const requiredSuggestSyncMarkers = [
@@ -148,6 +150,12 @@ export async function installSkill(options: InstallSkillOptions): Promise<Instal
     force: true,
     filter: (source) => !source.includes(`${path.sep}.DS_Store`)
   });
+  const toolingDir = path.resolve(options.toolingDir ?? path.dirname(options.sourceDir));
+  await writeFile(
+    path.join(targetDir, "runtime.json"),
+    `${JSON.stringify({ contractVersion: "1", toolingDir }, null, 2)}\n`,
+    "utf8"
+  );
 
   return {
     targetDir,
@@ -315,12 +323,13 @@ async function writeSkillPackageChecklist(packageDir: string): Promise<void> {
     "npm run skill:validate",
     "npm run skill:validate-installed",
     "npm run suggest-sync -- --intent war",
+    "npm run context -- --query \"这回合应该做什么？\" --refresh none",
     "npm run preflight -- --snapshot-dir \"<snapshot-dir>\" --intent war",
     "```",
     "",
     "## Expected behavior",
     "",
-    "- The skill must prefer Mod snapshot, handoff, preflight, summarize, suggest-sync, and doctor outputs over blind analysis.",
+    "- The skill must use the single context runtime first; handoff/preflight/summarize/doctor are compatibility and diagnostics paths.",
     "- If war/map/policy/city data is missing, it should ask the player to open the Civ6 AI briefing panel and click `更新战情` (`Update Briefing`).",
     "- It must keep multiplayer advice limited to local-player visible information.",
     "- It must treat doctor failures, manifest mismatches, or reason=\"exported\" mismatches as sync blockers.",
@@ -412,7 +421,7 @@ async function buildManifestFiles(packageDir: string): Promise<SkillPackageManif
   const files = await listFiles(packageDir);
   const manifestFiles: SkillPackageManifestFile[] = [];
   for (const relativePath of files) {
-    if (relativePath === SKILL_PACKAGE_MANIFEST_FILE) {
+    if (relativePath === SKILL_PACKAGE_MANIFEST_FILE || relativePath === "runtime.json") {
       continue;
     }
     const absolutePath = path.join(packageDir, relativePath);

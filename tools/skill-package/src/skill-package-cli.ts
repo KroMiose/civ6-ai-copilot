@@ -48,12 +48,14 @@ program
   .command("install")
   .description("Install the source skill into the local Agent skills directory.")
   .option("--skills-dir <dir>", "Directory containing Agent skill folders.", defaultCodexSkillsDir())
+  .option("--tooling-dir <dir>", "Runtime tooling directory recorded for the installed skill. Defaults to the project/release tooling root.")
   .option("--clean", "Remove the installed civ6-ai-copilot skill folder before copying.", false)
-  .action(async (commandOptions: { skillsDir: string; clean: boolean }) => {
+  .action(async (commandOptions: { skillsDir: string; toolingDir?: string; clean: boolean }) => {
     const options = program.opts<{ source: string }>();
     const result = await installSkill({
       sourceDir: path.resolve(options.source),
       skillsDir: path.resolve(commandOptions.skillsDir),
+      toolingDir: commandOptions.toolingDir ? path.resolve(commandOptions.toolingDir) : path.resolve(options.source, ".."),
       clean: commandOptions.clean
     });
     console.log(JSON.stringify(result, null, 2));

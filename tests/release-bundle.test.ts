@@ -33,6 +33,7 @@ test("release bundle packages Mod, skill, docs, manual tests, and manifest", asy
     await stat(path.join(result.bundleDir, "tooling", "package-lock.json"));
     await stat(path.join(result.bundleDir, "tooling", ".gitignore"));
     await stat(path.join(result.bundleDir, "tooling", "tools", "bridge", "src", "cli.ts"));
+    await stat(path.join(result.bundleDir, "tooling", "tools", "copilot", "src", "context-cli.ts"));
     await stat(path.join(result.bundleDir, "tooling", "tools", "paths", "src", "civ6-paths-cli.ts"));
     await stat(path.join(result.bundleDir, "tooling", "schemas", "snapshot.schema.json"));
     await stat(path.join(result.bundleDir, "tooling", "tests", "fixtures", "minimal-player-visible.snapshot.json"));
@@ -54,6 +55,7 @@ test("release bundle packages Mod, skill, docs, manual tests, and manifest", asy
     assert.equal(manifest.files.some((file: { path: string }) => file.path === RELEASE_MAC_COPILOT_SCRIPT_FILE), true);
     assert.equal(manifest.files.some((file: { path: string }) => file.path === "skill/civ6-ai-copilot/SKILL.md"), true);
     assert.equal(manifest.files.some((file: { path: string }) => file.path === "tooling/package.json"), true);
+    assert.equal(manifest.files.some((file: { path: string }) => file.path === "tooling/tools/copilot/src/context.ts"), true);
     assert.equal(manifest.files.some((file: { path: string }) => file.path === "tooling/.gitignore"), true);
     assert.equal(manifest.files.some((file: { path: string }) => file.path === "tooling/tools/release/src/rc-check.ts"), true);
     assert.equal(

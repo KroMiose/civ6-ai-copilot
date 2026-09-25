@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -68,6 +68,35 @@ test("copilot prepare refreshes from Lua.log on Windows-style auto mode", async 
 
     const copiedSnapshot = JSON.parse(await readFile(path.join(handoffDir, "latest.json"), "utf8"));
     assert.equal(copiedSnapshot.source.exportId, "prepare-export-0002");
+  } finally {
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+
+test("copilot prepare invalidates stale handoff before a failed refresh", async () => {
+  const rootDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-prepare-stale-"));
+  const snapshotDir = path.join(rootDir, "snapshots");
+  const handoffDir = path.join(rootDir, "handoff");
+  try {
+    await writeFile(path.join(rootDir, "dummy"), "x", "utf8");
+    await writeFile(path.join(rootDir, "Lua.log"), "", "utf8");
+    await import("node:fs/promises").then(({ mkdir }) => mkdir(handoffDir, { recursive: true }));
+    const stalePath = path.join(handoffDir, "latest.json");
+    await writeFile(stalePath, "{\"stale\":true}\n", "utf8");
+
+    const report = await runCopilotPrepare({
+      platform: "win32",
+      homeDir: "C:\\Users\\Player",
+      luaLogPath: path.join(rootDir, "Lua.log"),
+      snapshotDir,
+      handoffDir,
+      clean: true,
+      intents: ["turn-priority"]
+    });
+
+    assert.equal(report.readyForCopilot, false);
+    await assert.rejects(access(stalePath));
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }

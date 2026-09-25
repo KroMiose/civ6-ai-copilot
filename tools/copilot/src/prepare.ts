@@ -1,4 +1,5 @@
-import { mkdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { runBridgeOnce, type BridgeRunResult } from "../../bridge/src/bridge.js";
 import { buildCiv6AICopilotPaths, type Civ6AICopilotPaths, type Civ6PathPlatform } from "../../paths/src/civ6-paths.js";
 import { LUA_STATE_NAME } from "../../project/src/version.js";
@@ -74,9 +75,14 @@ export async function runCopilotPrepare(options: CopilotPrepareOptions = {}): Pr
   });
 
   await mkdir(paths.snapshotDir, { recursive: true });
+  if (options.clean) {
+    // Invalidate old handoff artifacts before attempting a new refresh. A failed refresh
+    // must never leave a previous "ready" handoff looking current.
+    await rm(paths.handoffDir, { recursive: true, force: true });
+  }
   await mkdir(paths.handoffDir, { recursive: true });
 
-  const refresh = await runRefresh(paths, options);
+  const refresh = await runCopilotRefresh(paths, options);
   if (refresh.attempted && !refresh.ok) {
     const nextActions = refreshNextActions(refresh, paths, options);
     return {
@@ -148,7 +154,7 @@ export function formatCopilotPrepareMarkdown(report: CopilotPrepareReport): stri
   return `${lines.join("\n")}\n`;
 }
 
-async function runRefresh(paths: Civ6AICopilotPaths, options: CopilotPrepareOptions): Promise<CopilotRefreshReport> {
+export async function runCopilotRefresh(paths: Civ6AICopilotPaths, options: CopilotPrepareOptions): Promise<CopilotRefreshReport> {
   const requestedMode = options.refreshMode ?? "auto";
   const mode = resolveRefreshMode(requestedMode, paths.platform);
 
@@ -163,6 +169,8 @@ async function runRefresh(paths: Civ6AICopilotPaths, options: CopilotPrepareOpti
     };
   }
 
+  const currentExportId = await readCurrentExportId(paths.snapshotDir);
+
   if (mode === "tuner") {
     const result = await runTunerBridgeOnce({
       outputDir: paths.snapshotDir,
@@ -170,7 +178,8 @@ async function runRefresh(paths: Civ6AICopilotPaths, options: CopilotPrepareOpti
       ports: options.port ? [options.port] : undefined,
       state: options.state ?? LUA_STATE_NAME,
       timeoutMs: options.timeoutMs,
-      allowInvalid: options.allowInvalid
+      allowInvalid: options.allowInvalid,
+      skipExportId: currentExportId
     });
     return {
       requestedMode,
@@ -186,7 +195,8 @@ async function runRefresh(paths: Civ6AICopilotPaths, options: CopilotPrepareOpti
   const result = await runBridgeOnce({
     inputLog: paths.luaLogPath,
     outputDir: paths.snapshotDir,
-    allowInvalid: options.allowInvalid
+    allowInvalid: options.allowInvalid,
+    skipExportId: currentExportId
   });
   return {
     requestedMode,
@@ -252,4 +262,24 @@ function buildCopilotCommandArgs(options: CopilotPrepareOptions): string {
 
 function normalizedList(values: string[] | undefined): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
+}
+
+async function readCurrentExportId(snapshotDir: string): Promise<string | undefined> {
+  try {
+    const [manifestText, latestText] = await Promise.all([
+      readFile(`${snapshotDir}/latest-manifest.json`, "utf8"),
+      readFile(`${snapshotDir}/latest.json`, "utf8")
+    ]);
+    const manifest = JSON.parse(manifestText) as { exportId?: unknown; checksumSha256?: unknown };
+    const latest = JSON.parse(latestText) as { source?: { exportId?: unknown } };
+    const exportId = typeof manifest.exportId === "string" ? manifest.exportId : undefined;
+    if (!exportId || latest.source?.exportId !== exportId) return undefined;
+    if (typeof manifest.checksumSha256 === "string") {
+      const checksum = createHash("sha256").update(Buffer.from(latestText, "utf8")).digest("hex");
+      if (checksum !== manifest.checksumSha256) return undefined;
+    }
+    return exportId;
+  } catch {
+    return undefined;
+  }
 }

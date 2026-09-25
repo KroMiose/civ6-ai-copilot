@@ -33,17 +33,25 @@ npm run mod -- package --output-dir ./release --clean
 
 ## 标准入口
 
-日常分析使用一条命令：
+日常 Agent 分析不要再手工组织 intent、handoff 和多份文件。安装后的 Skill 使用自带 wrapper：
 
 ```bash
-npm run copilot -- --intent turn-priority --clean
+node scripts/context.mjs --query "<用户原话>"
 ```
 
-AI 负责把玩家请求转成稳定意图：`turn-priority`、`war`、`settling`、`city-production`、`tech-civic`、`policy`、`exploration` 或 `navy`。用户原话只作为理解来源或 `--note` 备注，不作为同步范围的稳定参数。
+wrapper 从 Skill 安装时生成的 `runtime.json` 定位 tooling，因此不依赖当前工作目录。Runtime 会按平台刷新当前战情、验证唯一 canonical snapshot、根据用户原话推断分析焦点，并一次返回 JSON context。
 
-该命令会发现标准路径，按平台刷新当前战情，执行预检，生成 handoff，并在输出中说明当前是否可以分析。
+- `status=ready`：直接分析返回的 `summary` 与 `context`。
+- `status=needs-game-refresh`：转述 `userActions`，让玩家在战情简报点击「更新战情」。
+- `status=runtime-error`：按错误动作排障，不要搜索源码或文件系统猜运行路径。
 
-输出为“可以分析”时，读取 handoff 目录中的 `codex-prompt.md`，再按其中列出的文件回答。输出要求更新情报时，说明缺少模块及其影响，并统一让玩家回到 Civ6 左上副官入口打开「战情简报」、点击「更新战情」；面板显示“简报已汇总，可继续由AI副官分析。”后重新运行同一条 `npm run copilot` 命令。
+开发者可直接运行：
+
+```bash
+npm run context -- --query "这回合应该做什么？"
+```
+
+旧的 `npm run copilot -- --intent turn-priority --clean` 继续保留给跨设备 handoff、发布验证和兼容工作流。
 
 ## 底层命令
 
