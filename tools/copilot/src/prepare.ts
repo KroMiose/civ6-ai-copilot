@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { runBridgeOnce, type BridgeRunResult } from "../../bridge/src/bridge.js";
 import { buildCiv6AICopilotPaths, type Civ6AICopilotPaths, type Civ6PathPlatform } from "../../paths/src/civ6-paths.js";
@@ -265,8 +266,19 @@ function normalizedList(values: string[] | undefined): string[] {
 
 async function readCurrentExportId(snapshotDir: string): Promise<string | undefined> {
   try {
-    const manifest = JSON.parse(await readFile(`${snapshotDir}/latest-manifest.json`, "utf8")) as { exportId?: unknown };
-    return typeof manifest.exportId === "string" && manifest.exportId.length > 0 ? manifest.exportId : undefined;
+    const [manifestText, latestText] = await Promise.all([
+      readFile(`${snapshotDir}/latest-manifest.json`, "utf8"),
+      readFile(`${snapshotDir}/latest.json`, "utf8")
+    ]);
+    const manifest = JSON.parse(manifestText) as { exportId?: unknown; checksumSha256?: unknown };
+    const latest = JSON.parse(latestText) as { source?: { exportId?: unknown } };
+    const exportId = typeof manifest.exportId === "string" ? manifest.exportId : undefined;
+    if (!exportId || latest.source?.exportId !== exportId) return undefined;
+    if (typeof manifest.checksumSha256 === "string") {
+      const checksum = createHash("sha256").update(Buffer.from(latestText, "utf8")).digest("hex");
+      if (checksum !== manifest.checksumSha256) return undefined;
+    }
+    return exportId;
   } catch {
     return undefined;
   }
