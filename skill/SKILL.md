@@ -21,9 +21,8 @@ node scripts/context.mjs
 
 ```bash
 node scripts/context.mjs \
-  --module cities --module units --module visibleMap --module resources \
-  --adjacent-units \
-  --render-map "<输出路径>/visible-map.svg"
+  --module cities --module units --module resources \
+  --map local:unit:开拓者:5
 ```
 
 ## 能读取的项目
@@ -46,8 +45,27 @@ node scripts/context.mjs \
 | `governors` | 总督 |
 | `trade` | 商路 |
 | `cityStates` | 已遇见城邦与使者 |
-| `adjacent-units` | 己方单位的 odd-r 相邻六格 |
-| `render-map` | 这次导出的玩家可见六边形 SVG |
+| `adjacent-units` | 己方单位的 odd-r 相邻六格，只作文字简表 |
+| `render-map` | 整张可见图的 SVG，排障时用 |
+
+## 地图
+
+铺城、移动、战线和局势先看图，再回答。不要自己写脚本把地块扫成文字。一次可以要多层。区域图默认半径 8，局部图默认 5，单次最大半径 20。半径是六边形距离，由你指定。
+
+```bash
+node scripts/context.mjs --map world
+node scripts/context.mjs --map region:city:首都
+node scripts/context.mjs --map local:unit:开拓者:5
+node scripts/context.mjs --map local:coord:12,18:9 --map world
+```
+
+| 层级 | 用来判断 | 图上的重点 |
+| --- | --- | --- |
+| `world` | 位置、文明、军队和资源大局 | 地貌、海岸、山脉、河流、归属、城市、单位、战略和奢侈资源。不画单格产出 |
+| `region` | 一片区域、战线、城市圈 | 地貌、特征、淡水、资源名称、改良、区域、人口。不画每格产出 |
+| `local` | 这一步、这一城、这一格 | 产出、吸引力、河流边、悬崖、建筑、生产和己方单位移动力 |
+
+圆心写成 `city:名称或id`、`unit:名称或id`、`coord:x,y` 或 `selection`。半径接在最后，例如 `local:city:首都:7`。打开返回的 `mapViews[].image.path`（PNG）。`places` 是这一层的索引。指定了 `--map` 时，结果不再附带整份 `visibleMap`；只有你另外传入 `--module visibleMap` 才会带上全部地块。
 
 坐标只用于核对。面向玩家用相对方向和可见锚点，例如「勇士右上方的盐」。邻接规则见 `references/snapshot-schema.md`。
 

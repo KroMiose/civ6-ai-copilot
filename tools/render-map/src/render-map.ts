@@ -1,9 +1,15 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { validateSnapshotObject, type SnapshotValidationResult } from "../../snapshot/src/validate.js";
 
+export type MapLevel = "world" | "region" | "local";
+
 export interface RenderMapOptions {
   allowInvalid?: boolean;
   tileSize?: number;
+  level?: MapLevel;
+  bounds?: Bounds;
+  disk?: Array<{ x: number; y: number }>;
+  rings?: Array<{ x: number; y: number; kind: "blocked" | "settle" | "workable" }>;
 }
 
 export interface RenderedMap {
@@ -48,38 +54,46 @@ export async function renderSnapshotMapObject(snapshot: SnapshotLike, options: R
   }
 
   const usable = (name: string) => snapshot.modules?.includes(name) && snapshot.moduleStatus?.[name]?.capturedTurn === snapshot.session?.gameTurn;
-  const tiles = usable("visibleMap") && Array.isArray(snapshot.visibleMap?.tiles) ? snapshot.visibleMap.tiles : [];
-  const cities = usable("cities") && Array.isArray(snapshot.cities) ? snapshot.cities : [];
-  const units = usable("units") && Array.isArray(snapshot.units) ? snapshot.units : [];
-  const bounds = getBounds(usable("visibleMap") ? snapshot.visibleMap?.bounds : undefined, tiles);
-  const tileSize = options.tileSize ?? 34;
+  const exportedTiles = usable("visibleMap") && Array.isArray(snapshot.visibleMap?.tiles) ? snapshot.visibleMap.tiles : [];
+  const diskKeys = options.disk ? new Set(options.disk.map((coord) => coordKey(coord.x, coord.y))) : undefined;
+  const tiles = diskKeys ? exportedTiles.filter((tile) => diskKeys.has(coordKey(tile.x, tile.y))) : exportedTiles;
+  const cities = (usable("cities") && Array.isArray(snapshot.cities) ? snapshot.cities : [])
+    .filter((city) => !diskKeys || diskKeys.has(coordKey(city.x, city.y)));
+  const units = (usable("units") && Array.isArray(snapshot.units) ? snapshot.units : [])
+    .filter((unit) => !diskKeys || diskKeys.has(coordKey(unit.x, unit.y)));
+  const bounds = options.bounds ?? getBounds(usable("visibleMap") ? snapshot.visibleMap?.bounds : undefined, tiles);
+  const tileSize = options.tileSize ?? defaultTileSize(options.level);
   const layout = createHexLayout(bounds, tileSize);
   const padding = 24;
   const headerHeight = 54;
-  const legendHeight = 140;
-  const width = Math.max(520, layout.mapWidth + padding * 2);
-  const height = Math.max(260, headerHeight + layout.mapHeight + padding + legendHeight);
+  const legendHeight = options.level ? 78 : 140;
+  const width = Math.max(options.level === "world" ? 360 : 520, Math.ceil(layout.mapWidth + padding * 2));
+  const height = Math.max(options.level ? 180 : 260, Math.ceil(headerHeight + layout.mapHeight + padding + legendHeight));
   const cityById = new Map(cities.map((city) => [city.id, city]));
   const unitsById = new Map(units.map((unit) => [unit.id, unit]));
   const unitsByCoord = groupUnitsByCoord(units);
   const exportedTileKeys = new Set(tiles.map((tile) => coordKey(tile.x, tile.y)));
+  const missingCoords = (options.disk ?? []).filter((coord) => !exportedTileKeys.has(coordKey(coord.x, coord.y)));
 
-  const tileElements = tiles.map((tile) => renderTile(tile, bounds, layout, padding, headerHeight)).join("\n");
+  const tileElements = tiles.map((tile) => renderTile(tile, bounds, layout, padding, headerHeight, options.level)).join("\n");
   const coordinateOnlyTiles = renderCoordinateOnlyTiles({
-    values: [...cities, ...units],
+    values: [...cities, ...units, ...missingCoords, ...(options.rings ?? [])],
     exportedTileKeys,
     bounds,
     layout,
     padding,
     headerHeight
   });
+  const ringElements = renderRings(options.rings ?? [], bounds, layout, padding, headerHeight);
   const cityElements = cities
     .filter((city) => isWithinBounds(city, bounds))
-    .map((city) => renderCity(city, bounds, layout, padding, headerHeight))
+    .map((city) => renderCity(city, bounds, layout, padding, headerHeight, options.level))
     .join("\n");
   const unitElements = renderUnits({ tiles, unitsByCoord, unitsById, bounds, layout, padding, headerHeight });
-  const tileLabels = tiles.map((tile) => renderTileLabel(tile, cityById, bounds, layout, padding, headerHeight)).join("\n");
-  const title = `civ6-ai-copilot visible map turn ${snapshot.session?.gameTurn ?? "?"}`;
+  const tileLabels = options.level === "world"
+    ? ""
+    : tiles.map((tile) => renderTileLabel(tile, cityById, bounds, layout, padding, headerHeight, options.level)).join("\n");
+  const title = `civ6-ai-copilot ${options.level ?? "visible"} map turn ${snapshot.session?.gameTurn ?? "?"}`;
 
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(title)}">
@@ -91,6 +105,7 @@ export async function renderSnapshotMapObject(snapshot: SnapshotLike, options: R
   <g id="tiles">
 ${indent(tileElements, 4)}
 ${indent(coordinateOnlyTiles, 4)}
+${indent(ringElements, 4)}
 ${indent(tileLabels, 4)}
 ${indent(cityElements, 4)}
 ${indent(unitElements, 4)}
@@ -110,16 +125,24 @@ ${indent(renderLegend(padding, height - legendHeight + 20), 2)}
   };
 }
 
-function renderTile(tile: TileLike, bounds: Bounds, layout: HexLayout, padding: number, headerHeight: number): string {
+function defaultTileSize(level: MapLevel | undefined): number {
+  if (level === "world") return 18;
+  if (level === "region") return 28;
+  if (level === "local") return 42;
+  return 34;
+}
+
+function renderTile(tile: TileLike, bounds: Bounds, layout: HexLayout, padding: number, headerHeight: number, level?: MapLevel): string {
   const { cx, cy } = hexCenter(tile, bounds, layout, padding, headerHeight);
-  const fill = terrainFill(tile.terrainType);
+  const fill = terrainFill(tile.terrainType, tile.isMountain === true);
   const stroke = tile.visibleNow ? "#243b53" : "#9fb3c8";
   const opacity = tile.visibleNow ? "1" : "0.62";
   const className = tile.visibleNow ? "tile visible-now" : "tile revealed-only";
   const ownerRing = typeof tile.ownerPlayerId === "number"
     ? `<polygon points="${hexPoints(cx, cy, layout.radius * 0.78)}" fill="none" stroke="${ownerStroke(tile.ownerPlayerId)}" stroke-width="2" opacity="0.9"/>`
     : "";
-  return `<g class="${className}" data-tile="${tile.x},${tile.y}"><polygon points="${hexPoints(cx, cy, layout.radius)}" fill="${fill}" stroke="${stroke}" stroke-width="1.2" opacity="${opacity}">${tileTitle(tile)}</polygon>${ownerRing}</g>`;
+  const resourceMark = level === "world" && resourceClass(tile.resourceType) ? `<circle cx="${cx}" cy="${cy}" r="${Math.max(2.5, layout.radius * 0.22)}" fill="${resourceClass(tile.resourceType) === "strategic" ? "#f2c14e" : "#9b51e0"}"/>` : "";
+  return `<g class="${className}" data-tile="${tile.x},${tile.y}"><polygon points="${hexPoints(cx, cy, layout.radius)}" fill="${fill}" stroke="${stroke}" stroke-width="1.2" opacity="${opacity}">${tileTitle(tile)}</polygon>${ownerRing}${resourceMark}</g>`;
 }
 
 function renderTileLabel(
@@ -128,17 +151,36 @@ function renderTileLabel(
   bounds: Bounds,
   layout: HexLayout,
   padding: number,
-  headerHeight: number
+  headerHeight: number,
+  level?: MapLevel
 ): string {
   const { cx, cy } = hexCenter(tile, bounds, layout, padding, headerHeight);
   const city = tile.cityId ? cityById.get(tile.cityId) : undefined;
-  const resource = shortResource(tile.resourceType);
-  const label = city?.name ?? resource;
+  const resource = level === "local" ? readableName(tile.resourceType) : shortResource(tile.resourceType);
+  const label = level === "local" ? resource : (city?.name ?? resource);
+  const yieldLine = level === "local" ? formatYields(tile.yields) : "";
   const resourceAttr = tile.resourceType ? ` data-resource-type="${escapeXml(tile.resourceType)}"` : "";
   const labelText = label
-    ? `<text x="${cx}" y="${cy + 3}" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="#102a43">${escapeXml(label)}</text>`
+    ? `<text x="${cx}" y="${cy - 2}" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="#102a43">${escapeXml(label)}</text>`
     : "";
-  return `<g class="tile-label" data-coord="${tile.x},${tile.y}"${resourceAttr}><title>${escapeXml(tileTitleText(tile, city))}</title>${labelText}<text x="${cx}" y="${cy + layout.radius * 0.56}" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#102a43">${escapeXml(`${tile.x},${tile.y}`)}</text></g>`;
+  const yieldText = yieldLine
+    ? `<text x="${cx}" y="${cy + 9}" text-anchor="middle" font-family="Arial, sans-serif" font-size="7" fill="#102a43">${escapeXml(yieldLine)}</text>`
+    : "";
+  return `<g class="tile-label" data-coord="${tile.x},${tile.y}"${resourceAttr}><title>${escapeXml(tileTitleText(tile, city))}</title>${labelText}${yieldText}<text x="${cx}" y="${cy + layout.radius * 0.56}" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" fill="#102a43">${escapeXml(`${tile.x},${tile.y}`)}</text></g>`;
+}
+
+function renderRings(
+  rings: Array<{ x: number; y: number; kind: "blocked" | "settle" | "workable" }>,
+  bounds: Bounds,
+  layout: HexLayout,
+  padding: number,
+  headerHeight: number
+): string {
+  return rings.filter((ring) => isWithinBounds(ring, bounds)).map((ring) => {
+    const { cx, cy } = hexCenter(ring, bounds, layout, padding, headerHeight);
+    const color = ring.kind === "settle" ? "#2f9e44" : ring.kind === "workable" ? "#f2c14e" : "#e8590c";
+    return `<polygon points="${hexPoints(cx, cy, layout.radius * 0.92)}" fill="none" stroke="${color}" stroke-width="1.4" stroke-dasharray="2 2" opacity="0.85"><title>${ring.kind} ${ring.x},${ring.y}</title></polygon>`;
+  }).join("\n");
 }
 
 function renderCoordinateOnlyTiles(options: {
@@ -168,9 +210,12 @@ function renderCoordinateOnlyTiles(options: {
   return elements.join("\n");
 }
 
-function renderCity(city: CityLike, bounds: Bounds, layout: HexLayout, padding: number, headerHeight: number): string {
+function renderCity(city: CityLike, bounds: Bounds, layout: HexLayout, padding: number, headerHeight: number, level?: MapLevel): string {
   const { cx, cy } = hexCenter(city, bounds, layout, padding, headerHeight);
-  return `<g data-city="${escapeXml(city.id ?? "")}"><circle cx="${cx}" cy="${cy}" r="${Math.max(6, layout.radius * 0.4)}" fill="#f7c948" stroke="#8d2b0b" stroke-width="2"/><text x="${cx}" y="${cy + 3}" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="700" fill="#1f2933">C</text><text x="${cx}" y="${cy - layout.radius - 5}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#1f2933">${escapeXml(city.name ?? city.id ?? "City")}</text></g>`;
+  const caption = level === "region" && typeof city.population === "number"
+    ? `${city.name ?? city.id ?? "City"} ${city.population}`
+    : (city.name ?? city.id ?? "City");
+  return `<g data-city="${escapeXml(city.id ?? "")}"><circle cx="${cx}" cy="${cy}" r="${Math.max(6, layout.radius * 0.4)}" fill="#f7c948" stroke="#8d2b0b" stroke-width="2"/><text x="${cx}" y="${cy + 3}" text-anchor="middle" font-family="Arial, sans-serif" font-size="9" font-weight="700" fill="#1f2933">C</text><text x="${cx}" y="${cy - layout.radius - 5}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="700" fill="#1f2933">${escapeXml(caption)}</text></g>`;
 }
 
 function renderUnits(options: {
@@ -313,7 +358,8 @@ function coordKey(x: number | undefined, y: number | undefined): string {
   return `${x ?? "?"},${y ?? "?"}`;
 }
 
-function terrainFill(terrainType: string | undefined): string {
+function terrainFill(terrainType: string | undefined, mountain = false): string {
+  if (mountain) return "#b7b7a4";
   const value = terrainType ?? "";
   if (value.includes("COAST") || value.includes("OCEAN")) {
     return "#8ecae6";
@@ -535,6 +581,33 @@ interface CityLike {
   name?: string;
   x?: number;
   y?: number;
+  population?: number;
+}
+
+export function resourceClass(resourceType: string | undefined): "strategic" | "luxury" | "bonus" | undefined {
+  if (!resourceType || resourceType === "UNKNOWN_RESOURCE" || resourceType === "-1") return undefined;
+  const name = resourceType.replace(/^RESOURCE_/, "");
+  if (["HORSES", "IRON", "NITER", "COAL", "OIL", "ALUMINUM", "URANIUM"].includes(name)) return "strategic";
+  if (["BANANAS", "CATTLE", "COPPER", "CRABS", "DEER", "FISH", "RICE", "SHEEP", "STONE", "WHEAT", "MAIZE"].includes(name)) return "bonus";
+  return "luxury";
+}
+
+export function readableName(value: string | undefined): string | undefined {
+  if (!value || value.startsWith("UNKNOWN")) return undefined;
+  return value.replace(/^(RESOURCE_|TERRAIN_|FEATURE_|IMPROVEMENT_|ROUTE_|DISTRICT_|UNIT_|CIVILIZATION_|LEADER_)/, "").replace(/_/g, " ").toLowerCase();
+}
+
+function formatYields(yields: Record<string, number> | undefined): string {
+  if (!yields) return "";
+  const labels: Record<string, string> = {
+    YIELD_FOOD: "粮",
+    YIELD_PRODUCTION: "锤",
+    YIELD_GOLD: "金",
+    YIELD_SCIENCE: "科",
+    YIELD_CULTURE: "文",
+    YIELD_FAITH: "信"
+  };
+  return Object.entries(yields).filter(([, amount]) => amount !== 0).map(([key, amount]) => `${labels[key] ?? key}:${amount}`).join(" ");
 }
 
 interface UnitLike {

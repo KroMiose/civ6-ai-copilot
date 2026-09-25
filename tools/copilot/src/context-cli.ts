@@ -10,6 +10,7 @@ program
   .option("--module <module>", "Module to include. Repeat or comma-separate. Omit to return every module in the latest export.", collectList, [])
   .option("--adjacent-units", "Add odd-r adjacent tiles for the local player's units.", false)
   .option("--render-map <path>", "Write a player-visible hex SVG for this export.")
+  .option("--map <spec>", "Map view. Repeat. world | region[:city|unit|coord|selection:value[:radius]] | local[:...]. Region defaults to radius 8, local to 5, maximum 20.", collectList, [])
   .option("--platform <platform>", "Target platform: win32, darwin, or linux. Defaults to the current platform.")
   .option("--home <dir>", "Target user's home directory. Defaults to the current user's home.")
   .option("--civ6-user-data-dir <dir>", "Override the Civ6 user-data root.")
@@ -33,6 +34,7 @@ const options = program.opts<{
   module: string[];
   adjacentUnits: boolean;
   renderMap?: string;
+  map: string[];
   platform?: "win32" | "darwin" | "linux";
   home?: string;
   civ6UserDataDir?: string;
@@ -58,6 +60,7 @@ const report = await runCopilotContext({
   modules: options.module,
   adjacentUnits: options.adjacentUnits,
   renderMapPath: options.renderMap,
+  mapSpecs: options.map,
   platform: options.platform,
   homeDir: options.home,
   civ6UserDataDir: options.civ6UserDataDir,

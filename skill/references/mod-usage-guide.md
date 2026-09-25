@@ -36,8 +36,12 @@ npm run mod -- package --output-dir ./release --clean
 日常 Agent 分析使用安装后的 wrapper。原话不决定读取哪些模块；Agent 按 `SKILL.md` 的清单自己传 `--module`。不传则返回最后一次成功汇总里的全部模块。
 
 ```bash
-node scripts/context.mjs --module cities --module units --module visibleMap --adjacent-units --render-map "<输出路径>/visible-map.svg"
+node scripts/context.mjs --map world
+node scripts/context.mjs --map region:city:首都
+node scripts/context.mjs --map local:unit:开拓者:5
 ```
+
+`--map` 的区域图默认半径 8，局部图默认 5，单次最大 20。铺城、移动和局势先看返回的 PNG。
 
 wrapper 从 Skill 安装时生成的 `runtime.json` 定位 tooling，因此不依赖当前工作目录。Runtime 读取游戏里最后一份写完的导出，校验后按点名的模块返回 JSON。
 

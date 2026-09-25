@@ -129,6 +129,34 @@ test("render-map writes an svg for the same export", async () => {
   }
 });
 
+test("map levels use the requested radius and omit the full tile list", async () => {
+  const snapshotDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-map-level-"));
+  try {
+    await writeLatest(snapshotDir, "context-export-levels");
+    const report = await runCopilotContext({
+      refreshMode: "none",
+      snapshotDir,
+      mapSpecs: ["world", "local:city:Capital", "region:unit:Archer:21", "local:city:不存在"]
+    });
+
+    assert.equal(report.status, "ready", JSON.stringify(report.gaps));
+    assert.equal(report.context?.visibleMap, undefined);
+    const world = report.mapViews?.find((view) => view.level === "world");
+    const local = report.mapViews?.find((view) => view.level === "local");
+    const region = report.mapViews?.find((view) => view.level === "region");
+    assert.equal(local?.radius, 5);
+    assert.equal(region?.radius, 20);
+    assert.equal(world?.places.tiles, undefined);
+    assert.ok((local?.places.tiles as unknown[] | undefined)?.length);
+    assert.match(report.gaps.join("\n"), /20/);
+    assert.match(report.gaps.join("\n"), /不存在/);
+    assert.equal((await stat(local!.image.path)).isFile(), true);
+    assert.equal((await readFile(local!.image.path)).subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+  } finally {
+    await rm(snapshotDir, { recursive: true, force: true });
+  }
+});
+
 test("a missing log is a runtime error and does not return an old analysis", async () => {
   const rootDir = await mkdtemp(path.join(os.tmpdir(), "civ6-ai-copilot-context-fail-"));
   try {

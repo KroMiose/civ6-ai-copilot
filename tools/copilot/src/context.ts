@@ -6,6 +6,7 @@ import { renderSnapshotMapToFile } from "../../render-map/src/render-map.js";
 import { COMPAT_VERSION, compatFromVersion } from "../../project/src/version.js";
 import { validateSnapshotObject } from "../../snapshot/src/validate.js";
 import { adjacentOwnUnits } from "./adjacent-units.js";
+import { buildMapViews, type MapView } from "./map-view.js";
 import {
   runCopilotRefresh,
   type CopilotPrepareOptions,
@@ -18,6 +19,7 @@ export interface CopilotContextOptions extends Omit<CopilotPrepareOptions, "hand
   modules?: string[];
   adjacentUnits?: boolean;
   renderMapPath?: string;
+  mapSpecs?: string[];
 }
 
 export interface CopilotContextReport {
@@ -57,6 +59,7 @@ export interface CopilotContextReport {
       tiles: number;
     };
   };
+  mapViews?: MapView[];
   userActions: string[];
 }
 
@@ -154,7 +157,9 @@ export async function runCopilotContext(options: CopilotContextOptions = {}): Pr
   }
 
   const unknown = modules.filter((name) => !KNOWN_MODULES.includes(name));
-  const selected = (modules.length > 0 ? modules.filter((name) => KNOWN_MODULES.includes(name)) : modulesInSnapshot(snapshot));
+  const mapSpecs = options.mapSpecs ?? [];
+  const selected = (modules.length > 0 ? modules.filter((name) => KNOWN_MODULES.includes(name)) : modulesInSnapshot(snapshot))
+    .filter((name) => mapSpecs.length === 0 || name !== "visibleMap" || modules.includes("visibleMap"));
   const context = projectSnapshot(snapshot, selected);
   const gaps = [
     ...selected.flatMap((name) => unavailableGap(snapshot, name)),
@@ -164,6 +169,14 @@ export async function runCopilotContext(options: CopilotContextOptions = {}): Pr
 
   if (options.adjacentUnits) {
     context.adjacentUnits = adjacentOwnUnits(snapshot);
+  }
+
+  let mapViews: MapView[] | undefined;
+  if (mapSpecs.length > 0) {
+    const exportId = text(snapshot.source?.exportId) ?? "current";
+    const built = await buildMapViews(snapshot, mapSpecs, path.join(paths.snapshotDir, "map-views", exportId.replace(/[^\w.-]+/g, "_")));
+    mapViews = built.views;
+    gaps.push(...built.gaps);
   }
 
   let artifacts: CopilotContextReport["artifacts"];
@@ -192,6 +205,7 @@ export async function runCopilotContext(options: CopilotContextOptions = {}): Pr
     gaps,
     context,
     artifacts,
+    mapViews,
     userActions: []
   };
 }
