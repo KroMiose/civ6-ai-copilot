@@ -1,4 +1,4 @@
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import { runBridgeOnce, type BridgeRunResult } from "../../bridge/src/bridge.js";
 import { buildCiv6AICopilotPaths, type Civ6AICopilotPaths, type Civ6PathPlatform } from "../../paths/src/civ6-paths.js";
 import { LUA_STATE_NAME } from "../../project/src/version.js";
@@ -168,6 +168,8 @@ export async function runCopilotRefresh(paths: Civ6AICopilotPaths, options: Copi
     };
   }
 
+  const currentExportId = await readCurrentExportId(paths.snapshotDir);
+
   if (mode === "tuner") {
     const result = await runTunerBridgeOnce({
       outputDir: paths.snapshotDir,
@@ -175,7 +177,8 @@ export async function runCopilotRefresh(paths: Civ6AICopilotPaths, options: Copi
       ports: options.port ? [options.port] : undefined,
       state: options.state ?? LUA_STATE_NAME,
       timeoutMs: options.timeoutMs,
-      allowInvalid: options.allowInvalid
+      allowInvalid: options.allowInvalid,
+      skipExportId: currentExportId
     });
     return {
       requestedMode,
@@ -191,7 +194,8 @@ export async function runCopilotRefresh(paths: Civ6AICopilotPaths, options: Copi
   const result = await runBridgeOnce({
     inputLog: paths.luaLogPath,
     outputDir: paths.snapshotDir,
-    allowInvalid: options.allowInvalid
+    allowInvalid: options.allowInvalid,
+    skipExportId: currentExportId
   });
   return {
     requestedMode,
@@ -257,4 +261,13 @@ function buildCopilotCommandArgs(options: CopilotPrepareOptions): string {
 
 function normalizedList(values: string[] | undefined): string[] {
   return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))];
+}
+
+async function readCurrentExportId(snapshotDir: string): Promise<string | undefined> {
+  try {
+    const manifest = JSON.parse(await readFile(`${snapshotDir}/latest-manifest.json`, "utf8")) as { exportId?: unknown };
+    return typeof manifest.exportId === "string" && manifest.exportId.length > 0 ? manifest.exportId : undefined;
+  } catch {
+    return undefined;
+  }
 }
