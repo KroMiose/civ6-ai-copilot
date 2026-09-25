@@ -27,7 +27,7 @@ node scripts/context.mjs --query "<用户原话>"
 
 Runtime 返回一个 JSON contract：
 
-- `status=ready`：直接使用 `summary` 和 `context` 回答。不要再读取 `latest.json`、manifest、handoff 或源码来“确认一下”。
+- `status=ready`：直接使用 `analysis` 和 `context` 回答。不要再读取 `latest.json`、manifest、handoff 或源码来“确认一下”。
 - `status=needs-game-refresh`：不要给依赖当前局势的最终结论；把 `userActions` 简洁告诉玩家，通常是打开 Civ6 左上副官入口的「战情简报」并点击「更新战情」。
 - `status=runtime-error`：按 `userActions` 排障。不要自行搜索仓库或研究实现源码猜运行方式；确有必要时才读取 `references/mod-usage-guide.md` 和 `references/in-game-briefing-guide.md`。
 
@@ -43,7 +43,7 @@ Runtime 返回一个 JSON contract：
 - 风险
 - 仍需关注
 
-涉及开局、铺城、区域、探索、战争前线和单位移动时，以 Runtime 返回的 `context.units`、`context.visibleMap` 及摘要中的单位相邻地块为依据。坐标仅用于内部核对；面向玩家优先使用相对方向和可见锚点，例如“勇士右上方的盐”“首都南侧河湾”。
+涉及开局、铺城、区域、探索、战争前线和单位移动时，以 Runtime 返回的 `context.units`、`context.visibleMap` 及 `analysis.highlights` 中的单位相邻地块为依据。坐标仅用于内部核对；面向玩家优先使用相对方向和可见锚点，例如“勇士右上方的盐”“首都南侧河湾”。
 
 不要从缺失字段推断事实；`unavailable` 不能当成空结果。不要要求玩家提供隐藏地图、不可见单位、未遇见文明或其他玩家私人状态。
 
