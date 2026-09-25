@@ -20,10 +20,10 @@ test("context returns one ready payload without requiring handoff file reads", a
 
     assert.equal(report.status, "ready", JSON.stringify(report, null, 2));
     assert.equal(report.identity?.exportId, "context-export-0001");
-    assert.equal(report.summary?.syncAdvice.intents.includes("policy"), true);
+    assert.equal(report.analysis?.intents.includes("policy"), true);
     assert.ok(report.context?.government);
     assert.equal(report.context?.visibleMap, undefined);
-    assert.match(report.canonical.snapshotPath ?? "", /latest\.json$/);
+    assert.equal("canonical" in report, false);
   } finally {
     await rm(snapshotDir, { recursive: true, force: true });
   }
@@ -40,7 +40,7 @@ test("context automatically includes map evidence for exploration questions", as
     });
 
     assert.equal(report.status, "ready", JSON.stringify(report, null, 2));
-    assert.equal(report.summary?.syncAdvice.intents.includes("exploration"), true);
+    assert.equal(report.analysis?.intents.includes("exploration"), true);
     assert.ok(report.context?.units);
     assert.ok(report.context?.visibleMap);
   } finally {
@@ -59,8 +59,8 @@ test("context maps broad turn-planning questions to turn-priority with map evide
     });
 
     assert.equal(report.status, "ready", JSON.stringify(report, null, 2));
-    assert.equal(report.summary?.syncAdvice.intents.includes("turn-priority"), true);
-    assert.equal(report.summary?.syncAdvice.requiredModules.includes("visibleMap"), true);
+    assert.equal(report.analysis?.intents.includes("turn-priority"), true);
+    assert.equal(report.analysis?.requiredModules.includes("visibleMap"), true);
     assert.ok(report.context?.visibleMap);
   } finally {
     await rm(snapshotDir, { recursive: true, force: true });
